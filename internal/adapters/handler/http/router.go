@@ -15,6 +15,12 @@ func NewHandler() http.Handler {
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("welcome"))
 		})
+
+		r.Route("/polls", func(r chi.Router) {
+		})
+
+		r.Route("/votes", func(r chi.Router) {
+		})
 	})
 
 	return r
