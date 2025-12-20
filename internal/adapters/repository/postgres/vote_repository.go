@@ -1,0 +1,46 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/poll/api/internal/core/domain"
+	"github.com/poll/api/internal/core/ports"
+)
+
+type voteRepository struct {
+	db *sql.DB
+}
+
+func NewVoteRepository(db *sql.DB) ports.VoteRepository {
+	return &voteRepository{
+		db: db,
+	}
+}
+
+func (r *voteRepository) SaveVote(ctx context.Context, vote *domain.Vote) error {
+	query := `
+		INSERT INTO votes (id, poll_id, option_id, voter_ip)
+		VALUES ($1, $2, $3, $4)
+	`
+	_, err := r.db.ExecContext(ctx, query, vote.ID, vote.PollID, vote.OptionID, vote.VoterIP)
+	if err != nil {
+		return fmt.Errorf("failed to save vote: %w", err)
+	}
+	return nil
+}
+
+func (r *voteRepository) HasVoted(ctx context.Context, pollID uuid.UUID, voterIP string) (bool, error) {
+	query := `SELECT 1 FROM votes WHERE poll_id = $1 AND voter_ip = $2 LIMIT 1`
+	var exists int
+	err := r.db.QueryRowContext(ctx, query, pollID, voterIP).Scan(&exists)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check existing vote: %w", err)
+	}
+	return true, nil
+}

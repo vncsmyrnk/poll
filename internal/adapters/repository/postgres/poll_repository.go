@@ -28,17 +28,17 @@ func (r *pollRepository) Save(ctx context.Context, poll *domain.Poll) error {
 	defer tx.Rollback()
 
 	queryPoll := `
-		INSERT INTO polls (id, title, description, created_at, expires_at)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO polls (id, title, description, expires_at)
+		VALUES ($1, $2, $3, $4)
 	`
-	_, err = tx.ExecContext(ctx, queryPoll, poll.ID, poll.Title, poll.Description, poll.CreatedAt, poll.ExpiresAt)
+	_, err = tx.ExecContext(ctx, queryPoll, poll.ID, poll.Title, poll.Description, poll.ExpiresAt)
 	if err != nil {
 		return fmt.Errorf("failed to insert poll: %w", err)
 	}
 
 	queryOption := `
-		INSERT INTO poll_options (id, poll_id, text, created_at)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO poll_options (id, poll_id, text)
+		VALUES ($1, $2, $3)
 	`
 	stmt, err := tx.PrepareContext(ctx, queryOption)
 	if err != nil {
@@ -47,7 +47,7 @@ func (r *pollRepository) Save(ctx context.Context, poll *domain.Poll) error {
 	defer stmt.Close()
 
 	for _, opt := range poll.Options {
-		_, err = stmt.ExecContext(ctx, opt.ID, opt.PollID, opt.Text, opt.CreatedAt)
+		_, err = stmt.ExecContext(ctx, opt.ID, opt.PollID, opt.Text)
 		if err != nil {
 			return fmt.Errorf("failed to insert option: %w", err)
 		}

@@ -42,10 +42,14 @@ func main() {
 	}
 
 	pollRepo := postgres.NewPollRepository(db)
+	voteRepo := postgres.NewVoteRepository(db)
 	pollService := services.NewPollService(pollRepo)
-	pollHandler := http.NewPollHandler(pollService)
+	voteService := services.NewVoteService(pollRepo, voteRepo)
 
-	handler := http.NewHandler(pollHandler)
+	pollHandler := http.NewPollHandler(pollService)
+	voteHandler := http.NewVoteHandler(voteService)
+	handler := http.NewHandler(pollHandler, voteHandler)
+
 	server := &stdhttp.Server{Addr: "0.0.0.0:8080", Handler: handler}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

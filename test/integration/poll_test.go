@@ -55,9 +55,12 @@ func TestPollFlow(t *testing.T) {
 
 	// 4. Setup Application (Hexagonal Composition)
 	repo := pollRepo.NewPollRepository(db)
+	voteRepo := pollRepo.NewVoteRepository(db)
 	svc := services.NewPollService(repo)
+	voteSvc := services.NewVoteService(repo, voteRepo)
 	handler := pollHttp.NewPollHandler(svc)
-	router := pollHttp.NewHandler(handler)
+	voteHandler := pollHttp.NewVoteHandler(voteSvc)
+	router := pollHttp.NewHandler(handler, voteHandler)
 
 	// 5. Start Test Server
 	server := httptest.NewServer(router)
@@ -120,6 +123,21 @@ func TestPollFlow(t *testing.T) {
 		assert.True(t, exists, "Option %s should exist", o.Text)
 		assert.Equal(t, id, o.ID, "Option ID should match")
 	}
+
+	// Step 4: Cast a Vote
+	votePayload := map[string]interface{}{
+		"option_id": fetchedPoll.Options[0].ID,
+	}
+	voteBody, _ := json.Marshal(votePayload)
+
+	resp, err = client.Post(fmt.Sprintf("%s/api/polls/%s/votes", server.URL, createdPoll.ID), "application/json", bytes.NewReader(voteBody))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	// Step 5: Attempt Duplicate Vote
+	resp, err = client.Post(fmt.Sprintf("%s/api/polls/%s/votes", server.URL, createdPoll.ID), "application/json", bytes.NewReader(voteBody))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
 }
 
 // Helper to start Postgres container

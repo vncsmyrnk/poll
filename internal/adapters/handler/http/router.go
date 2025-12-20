@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func NewHandler(pollHandler *PollHandler) http.Handler {
+func NewHandler(pollHandler *PollHandler, voteHandler *VoteHandler) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 
@@ -19,9 +19,7 @@ func NewHandler(pollHandler *PollHandler) http.Handler {
 		r.Route("/polls", func(r chi.Router) {
 			r.Post("/", pollHandler.CreatePoll)
 			r.Get("/{id}", pollHandler.GetPoll)
-		})
-
-		r.Route("/votes", func(r chi.Router) {
+			r.Post("/{id}/votes", voteHandler.VoteOnPoll)
 		})
 	})
 
