@@ -65,7 +65,7 @@ func (s *pollService) Create(ctx context.Context, input ports.CreatePollInput) (
 func (s *pollService) GetPoll(ctx context.Context, id string) (*domain.Poll, error) {
 	pollID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, errors.New("invalid poll id")
+		return nil, domain.ErrInvalidPollID
 	}
 
 	return s.repo.GetByID(ctx, pollID)

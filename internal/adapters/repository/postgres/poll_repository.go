@@ -73,7 +73,7 @@ func (r *pollRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Pol
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("poll not found: %w", err)
+			return nil, domain.ErrPollNotFound
 		}
 		return nil, fmt.Errorf("failed to get poll: %w", err)
 	}

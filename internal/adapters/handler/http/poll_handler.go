@@ -2,10 +2,11 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/poll/api/internal/core/domain"
 	"github.com/poll/api/internal/core/ports"
 )
 
@@ -40,7 +41,6 @@ func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 
 	poll, err := h.service.Create(r.Context(), input)
 	if err != nil {
-		// In a real app, check error type for validation vs internal error
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -61,12 +61,12 @@ func (h *PollHandler) GetPoll(w http.ResponseWriter, r *http.Request) {
 
 	poll, err := h.service.GetPoll(r.Context(), id)
 	if err != nil {
-		if err.Error() == "invalid poll id" {
+		if errors.Is(err, domain.ErrInvalidPollID) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if strings.Contains(err.Error(), "poll not found") {
-			http.Error(w, "poll not found", http.StatusNotFound)
+		if errors.Is(err, domain.ErrPollNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
 

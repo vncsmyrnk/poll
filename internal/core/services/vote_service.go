@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,7 +37,7 @@ func (s *voteService) Vote(ctx context.Context, input ports.VoteInput) error {
 		}
 	}
 	if !validOption {
-		return errors.New("invalid option for this poll")
+		return domain.ErrInvalidOption
 	}
 
 	// 3. Check if already voted
@@ -47,7 +46,7 @@ func (s *voteService) Vote(ctx context.Context, input ports.VoteInput) error {
 		return err
 	}
 	if hasVoted {
-		return errors.New("user has already voted")
+		return domain.ErrAlreadyVoted
 	}
 
 	// 4. Create Vote

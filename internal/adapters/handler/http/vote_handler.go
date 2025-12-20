@@ -2,11 +2,13 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/poll/api/internal/core/domain"
 	"github.com/poll/api/internal/core/ports"
 )
 
@@ -50,18 +52,21 @@ func (h *VoteHandler) VoteOnPoll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.Vote(r.Context(), input); err != nil {
-		if err.Error() == "invalid option for this poll" {
+		if errors.Is(err, domain.ErrInvalidOption) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err.Error() == "user has already voted" {
+		if errors.Is(err, domain.ErrAlreadyVoted) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
-		
+		if errors.Is(err, domain.ErrPollNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	w.WriteHeader(http.StatusCreated)
 }
