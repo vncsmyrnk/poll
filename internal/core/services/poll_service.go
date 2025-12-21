@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -75,32 +76,75 @@ func (s *pollService) GetPoll(ctx context.Context, id string) (*domain.Poll, err
 		return nil, err
 	}
 
-	// Fetch option stats in parallel
-	type optionStat struct {
-		Index      int
-		Count      int64
-		Percentage float64
-		Err        error
+	if err := s.enrichPollsWithStats(ctx, []*domain.Poll{poll}); err != nil {
+		return nil, err
 	}
-
-	statChan := make(chan optionStat, len(poll.Options))
-
-	for i, opt := range poll.Options {
-		go func(index int, pID, optID uuid.UUID) {
-			count, percentage, err := s.pollResultRepo.GetOptionStats(ctx, pID, optID)
-			statChan <- optionStat{Index: index, Count: count, Percentage: percentage, Err: err}
-		}(i, poll.ID, opt.ID)
-	}
-
-	for i := 0; i < len(poll.Options); i++ {
-		stat := <-statChan
-		if stat.Err != nil {
-			return nil, stat.Err
-		}
-		poll.Options[stat.Index].VoteCount = stat.Count
-		poll.Options[stat.Index].Percentage = stat.Percentage
-	}
-	close(statChan)
 
 	return poll, nil
+}
+
+func (s *pollService) enrichPollsWithStats(ctx context.Context, polls []*domain.Poll) error {
+	if len(polls) == 0 {
+		return nil
+	}
+
+	ids := make([]uuid.UUID, len(polls))
+	for i, p := range polls {
+		ids[i] = p.ID
+	}
+
+	statsMap, err := s.pollResultRepo.GetStatsForPolls(ctx, ids)
+	if err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	for _, p := range polls {
+		wg.Go(func() {
+			for i := range p.Options {
+				if stat, ok := statsMap[p.Options[i].ID]; ok {
+					p.Options[i].VoteCount = stat.VoteCount
+					p.Options[i].Percentage = stat.Percentage
+				}
+			}
+		})
+	}
+	wg.Wait()
+
+	return nil
+}
+
+func (s *pollService) ListPolls(ctx context.Context, input ports.ListPollsInput) ([]*domain.Poll, error) {
+	const pageSize = 10
+	const maxItems = 100
+
+	page := input.Page
+	if page < 1 {
+		page = 1
+	}
+
+	offset := (page - 1) * pageSize
+
+	if offset >= maxItems {
+		return []*domain.Poll{}, nil
+	}
+
+	var polls []*domain.Poll
+	var err error
+
+	if input.Query == "" {
+		polls, err = s.pollRepo.List(ctx, pageSize, offset)
+	} else {
+		polls, err = s.pollRepo.Search(ctx, pageSize, offset, input.Query)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.enrichPollsWithStats(ctx, polls); err != nil {
+		return nil, err
+	}
+
+	return polls, nil
 }

@@ -23,3 +23,8 @@ type PollOption struct {
 	Percentage float64   `json:"percentage"`
 	CreatedAt  time.Time `json:"created_at"`
 }
+
+type PollOptionStats struct {
+	VoteCount  int64
+	Percentage float64
+}

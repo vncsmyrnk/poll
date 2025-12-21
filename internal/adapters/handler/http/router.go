@@ -17,6 +17,7 @@ func NewHandler(pollHandler *PollHandler, voteHandler *VoteHandler) http.Handler
 		})
 
 		r.Route("/polls", func(r chi.Router) {
+			r.Get("/", pollHandler.ListPolls)
 			r.Post("/", pollHandler.CreatePoll)
 			r.Get("/{id}", pollHandler.GetPoll)
 			r.Post("/{id}/votes", voteHandler.VoteOnPoll)

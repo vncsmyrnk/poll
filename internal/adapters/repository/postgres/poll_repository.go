@@ -78,28 +78,11 @@ func (r *pollRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Pol
 		return nil, fmt.Errorf("failed to get poll: %w", err)
 	}
 
-	queryOptions := `
-		SELECT id, poll_id, text, created_at
-		FROM poll_options
-		WHERE poll_id = $1
-	`
-	rows, err := r.db.QueryContext(ctx, queryOptions, id)
+	options, err := r.fetchOptions(ctx, poll.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get poll options: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var opt domain.PollOption
-		if err := rows.Scan(&opt.ID, &opt.PollID, &opt.Text, &opt.CreatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan option: %w", err)
-		}
-		poll.Options = append(poll.Options, opt)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating options: %w", err)
-	}
+	poll.Options = options
 
 	return &poll, nil
 }
@@ -116,18 +99,91 @@ func (r *pollRepository) GetAll(ctx context.Context) ([]*domain.Poll, error) {
 	}
 	defer rows.Close()
 
+	return r.scanPolls(ctx, rows)
+}
+
+func (r *pollRepository) List(ctx context.Context, limit, offset int) ([]*domain.Poll, error) {
+	query := `
+		SELECT p.id, p.title, p.description, p.created_at, p.expires_at
+		FROM polls p
+		LEFT JOIN poll_results pr ON p.id = pr.poll_id
+		WHERE p.deleted_at IS NULL
+		GROUP BY p.id
+		ORDER BY COALESCE(SUM(pr.vote_count), 0) DESC, p.created_at DESC
+		LIMIT $1 OFFSET $2
+	`
+	rows, err := r.db.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list polls: %w", err)
+	}
+	defer rows.Close()
+
+	return r.scanPolls(ctx, rows)
+}
+
+func (r *pollRepository) Search(ctx context.Context, limit, offset int, q string) ([]*domain.Poll, error) {
+	query := `
+		SELECT p.id, p.title, p.description, p.created_at, p.expires_at
+		FROM polls p
+		LEFT JOIN poll_results pr ON p.id = pr.poll_id
+		WHERE p.deleted_at IS NULL AND p.title ILIKE $1
+		GROUP BY p.id
+		ORDER BY COALESCE(SUM(pr.vote_count), 0) DESC, p.created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+	rows, err := r.db.QueryContext(ctx, query, "%"+q+"%", limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search polls: %w", err)
+	}
+	defer rows.Close()
+
+	return r.scanPolls(ctx, rows)
+}
+
+func (r *pollRepository) scanPolls(ctx context.Context, rows *sql.Rows) ([]*domain.Poll, error) {
 	var polls []*domain.Poll
 	for rows.Next() {
 		var poll domain.Poll
 		if err := rows.Scan(&poll.ID, &poll.Title, &poll.Description, &poll.CreatedAt, &poll.ExpiresAt); err != nil {
 			return nil, fmt.Errorf("failed to scan poll: %w", err)
 		}
+
+		options, err := r.fetchOptions(ctx, poll.ID)
+		if err != nil {
+			return nil, err
+		}
+		poll.Options = options
+
 		polls = append(polls, &poll)
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating polls: %w", err)
 	}
-
 	return polls, nil
+}
+
+func (r *pollRepository) fetchOptions(ctx context.Context, pollID uuid.UUID) ([]domain.PollOption, error) {
+	queryOptions := `
+		SELECT id, poll_id, text, created_at
+		FROM poll_options
+		WHERE poll_id = $1
+	`
+	rows, err := r.db.QueryContext(ctx, queryOptions, pollID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get poll options: %w", err)
+	}
+	defer rows.Close()
+
+	var options []domain.PollOption
+	for rows.Next() {
+		var opt domain.PollOption
+		if err := rows.Scan(&opt.ID, &opt.PollID, &opt.Text, &opt.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan option: %w", err)
+		}
+		options = append(options, opt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating options: %w", err)
+	}
+	return options, nil
 }

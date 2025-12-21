@@ -199,6 +199,144 @@ func TestVoteSummarization(t *testing.T) {
 	}
 }
 
+// TestListPolls tests pagination and fuzzy search
+func TestListPolls(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	app := setupTestApp(t)
+	defer app.Teardown(t)
+
+	// Create 15 polls
+	// 5 "Alpha", 5 "Beta", 5 "Gamma"
+	prefixes := []string{"Alpha", "Beta", "Gamma"}
+	for _, prefix := range prefixes {
+		for i := 1; i <= 5; i++ {
+			payload := map[string]interface{}{
+				"title":       fmt.Sprintf("%s Poll %d", prefix, i),
+				"description": "Desc",
+				"options":     []string{"A", "B"},
+			}
+			body, _ := json.Marshal(payload)
+			// Introduce slight delay to ensure deterministic ordering by CreatedAt
+			time.Sleep(10 * time.Millisecond)
+			resp, err := app.Client.Post(app.Server.URL+"/api/polls", "application/json", bytes.NewReader(body))
+			require.NoError(t, err)
+			resp.Body.Close()
+		}
+	}
+
+	// 1. Test Pagination (Page 1) -> Should get 10 most recent (Gamma 5..1, Beta 5..1)
+	resp, err := app.Client.Get(app.Server.URL + "/api/polls?page=1")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var page1 []*domain.Poll
+	err = json.NewDecoder(resp.Body).Decode(&page1)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Len(t, page1, 10, "Page 1 should have 10 items")
+	// Verify ordering (newest first)
+	// Since we inserted Alpha, Beta, Gamma in order, Gamma is newest.
+	// So page 1 should contain Gammas and Betas.
+	assert.Contains(t, page1[0].Title, "Gamma", "Newest should be Gamma")
+
+	// 2. Test Pagination (Page 2) -> Should get remaining 5 (Alpha 5..1)
+	resp, err = app.Client.Get(app.Server.URL + "/api/polls?page=2")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var page2 []*domain.Poll
+	err = json.NewDecoder(resp.Body).Decode(&page2)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Len(t, page2, 5, "Page 2 should have 5 items")
+	assert.Contains(t, page2[0].Title, "Alpha", "Page 2 should start with Alpha")
+
+	// 3. Test Search ("Beta") -> Should get 5 items
+	resp, err = app.Client.Get(app.Server.URL + "/api/polls?q=Beta")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var searchResults []*domain.Poll
+	err = json.NewDecoder(resp.Body).Decode(&searchResults)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Len(t, searchResults, 5, "Search for Beta should return 5 items")
+	for _, p := range searchResults {
+		assert.Contains(t, p.Title, "Beta")
+	}
+}
+
+// TestListPollsSorted checks if polls are sorted by total votes descending
+func TestListPollsSorted(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	app := setupTestApp(t)
+	defer app.Teardown(t)
+
+	// Create 3 polls
+	// Poll A: 0 votes
+	// Poll B: 10 votes
+	// Poll C: 5 votes
+	// Expected Order: B, C, A
+
+	polls := make(map[string]uuid.UUID)
+	titles := []string{"Poll A", "Poll B", "Poll C"}
+
+	for _, title := range titles {
+		body, _ := json.Marshal(map[string]interface{}{
+			"title":       title,
+			"description": "Desc",
+			"options":     []string{"Opt1", "Opt2"},
+		})
+		resp, err := app.Client.Post(app.Server.URL+"/api/polls", "application/json", bytes.NewReader(body))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		var p domain.Poll
+		json.NewDecoder(resp.Body).Decode(&p)
+		polls[title] = p.ID
+		resp.Body.Close()
+	}
+
+	// Insert votes
+	// Poll B: 10 votes (for Opt1)
+	for i := 0; i < 10; i++ {
+		_, err := app.DB.Exec(`INSERT INTO votes (poll_id, option_id, voter_ip) VALUES ($1, (SELECT id FROM poll_options WHERE poll_id=$1 AND text='Opt1'), $2)`, polls["Poll B"], fmt.Sprintf("1.1.1.%d", i))
+		require.NoError(t, err)
+	}
+	// Poll C: 5 votes (for Opt1)
+	for i := 0; i < 5; i++ {
+		_, err := app.DB.Exec(`INSERT INTO votes (poll_id, option_id, voter_ip) VALUES ($1, (SELECT id FROM poll_options WHERE poll_id=$1 AND text='Opt1'), $2)`, polls["Poll C"], fmt.Sprintf("2.2.2.%d", i))
+		require.NoError(t, err)
+	}
+
+	// Summarize
+	err := app.SummarySvc.SummarizeAllVotes(context.Background())
+	require.NoError(t, err)
+
+	// List
+	resp, err := app.Client.Get(app.Server.URL + "/api/polls?page=1")
+	require.NoError(t, err)
+
+	var list []*domain.Poll
+	json.NewDecoder(resp.Body).Decode(&list)
+	resp.Body.Close()
+
+	require.GreaterOrEqual(t, len(list), 3)
+
+	// We might have other polls from other tests if DB isn't cleaned (Docker container is fresh per test run usually, but let's check carefully).
+	// Since setupTestApp starts a new container every time, it's fresh.
+
+	// Check order
+	assert.Equal(t, "Poll B", list[0].Title) // 10 votes
+	assert.Equal(t, "Poll C", list[1].Title) // 5 votes
+	assert.Equal(t, "Poll A", list[2].Title) // 0 votes
+}
+
 func setupPostgresContainer(ctx context.Context) (testcontainers.Container, string, error) {
 	dbName := "testdb"
 	user := "user"

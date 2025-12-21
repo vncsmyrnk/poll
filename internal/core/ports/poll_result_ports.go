@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/poll/api/internal/core/domain"
 )
 
 type PollResultRepository interface {
 	SummarizeVotes(ctx context.Context, pollID uuid.UUID) error
-	GetOptionStats(ctx context.Context, pollID uuid.UUID, optionID uuid.UUID) (int64, float64, error)
+	GetStatsForPolls(ctx context.Context, pollIDs []uuid.UUID) (map[uuid.UUID]domain.PollOptionStats, error)
 }
 
 type SummaryService interface {
