@@ -7,6 +7,9 @@ run-migration name:
 run-server:
   go run cmd/server/main.go
 
+run-vote-summary-generator:
+  go run cmd/votesummarygenerator/main.go
+
 build-and-run-api-image:
   docker build --target api -t poll-api .
   docker compose up -d
