@@ -50,3 +50,23 @@ func (r *pollResultRepository) GetOptionStats(ctx context.Context, pollID uuid.U
 
 	return count, percentage, nil
 }
+
+func (r *pollResultRepository) SummarizeVotes(ctx context.Context, pollID uuid.UUID) error {
+	query := `
+		INSERT INTO poll_results (poll_id, option_id, vote_count, last_updated_at)
+		SELECT poll_id, option_id, COUNT(*), NOW()
+		FROM votes
+		WHERE poll_id = $1
+		GROUP BY poll_id, option_id
+		ON CONFLICT (poll_id, option_id) DO UPDATE
+		SET vote_count = EXCLUDED.vote_count,
+		    last_updated_at = NOW();
+	`
+
+	_, err := r.db.ExecContext(ctx, query, pollID)
+	if err != nil {
+		return fmt.Errorf("failed to summarize votes for poll %s: %w", pollID, err)
+	}
+
+	return nil
+}
