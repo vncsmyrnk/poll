@@ -11,12 +11,14 @@ import (
 )
 
 type pollService struct {
-	repo ports.PollRepository
+	pollRepo       ports.PollRepository
+	pollResultRepo ports.PollResultRepository
 }
 
-func NewPollService(repo ports.PollRepository) ports.PollService {
+func NewPollService(pollRepo ports.PollRepository, pollResultRepo ports.PollResultRepository) ports.PollService {
 	return &pollService{
-		repo: repo,
+		pollRepo:       pollRepo,
+		pollResultRepo: pollResultRepo,
 	}
 }
 
@@ -54,7 +56,7 @@ func (s *pollService) Create(ctx context.Context, input ports.CreatePollInput) (
 		return nil, errors.New("at least two valid options are required")
 	}
 
-	err := s.repo.Save(ctx, poll)
+	err := s.pollRepo.Save(ctx, poll)
 	if err != nil {
 		return nil, err
 	}
@@ -68,5 +70,37 @@ func (s *pollService) GetPoll(ctx context.Context, id string) (*domain.Poll, err
 		return nil, domain.ErrInvalidPollID
 	}
 
-	return s.repo.GetByID(ctx, pollID)
+	poll, err := s.pollRepo.GetByID(ctx, pollID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch option stats in parallel
+	type optionStat struct {
+		Index      int
+		Count      int64
+		Percentage float64
+		Err        error
+	}
+
+	statChan := make(chan optionStat, len(poll.Options))
+
+	for i, opt := range poll.Options {
+		go func(index int, pID, optID uuid.UUID) {
+			count, percentage, err := s.pollResultRepo.GetOptionStats(ctx, pID, optID)
+			statChan <- optionStat{Index: index, Count: count, Percentage: percentage, Err: err}
+		}(i, poll.ID, opt.ID)
+	}
+
+	for i := 0; i < len(poll.Options); i++ {
+		stat := <-statChan
+		if stat.Err != nil {
+			return nil, stat.Err
+		}
+		poll.Options[stat.Index].VoteCount = stat.Count
+		poll.Options[stat.Index].Percentage = stat.Percentage
+	}
+	close(statChan)
+
+	return poll, nil
 }

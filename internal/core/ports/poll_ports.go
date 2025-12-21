@@ -10,6 +10,7 @@ import (
 type PollRepository interface {
 	Save(ctx context.Context, poll *domain.Poll) error
 	GetByID(ctx context.Context, id uuid.UUID) (*domain.Poll, error)
+	GetAll(ctx context.Context) ([]*domain.Poll, error)
 }
 
 type CreatePollInput struct {

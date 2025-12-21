@@ -103,3 +103,31 @@ func (r *pollRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Pol
 
 	return &poll, nil
 }
+
+func (r *pollRepository) GetAll(ctx context.Context) ([]*domain.Poll, error) {
+	query := `
+		SELECT id, title, description, created_at, expires_at
+		FROM polls
+		WHERE deleted_at IS NULL
+	`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all polls: %w", err)
+	}
+	defer rows.Close()
+
+	var polls []*domain.Poll
+	for rows.Next() {
+		var poll domain.Poll
+		if err := rows.Scan(&poll.ID, &poll.Title, &poll.Description, &poll.CreatedAt, &poll.ExpiresAt); err != nil {
+			return nil, fmt.Errorf("failed to scan poll: %w", err)
+		}
+		polls = append(polls, &poll)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating polls: %w", err)
+	}
+
+	return polls, nil
+}

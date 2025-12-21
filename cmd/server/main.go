@@ -37,13 +37,10 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := db.Ping(); err != nil {
-		log.Fatal(err)
-	}
-
 	pollRepo := postgres.NewPollRepository(db)
 	voteRepo := postgres.NewVoteRepository(db)
-	pollService := services.NewPollService(pollRepo)
+	resultRepo := postgres.NewPollResultRepository(db)
+	pollService := services.NewPollService(pollRepo, resultRepo)
 	voteService := services.NewVoteService(pollRepo, voteRepo)
 
 	pollHandler := http.NewPollHandler(pollService)
