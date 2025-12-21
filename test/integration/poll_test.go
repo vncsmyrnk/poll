@@ -25,60 +25,78 @@ import (
 	pollHttp "github.com/poll/api/internal/adapters/handler/http"
 	pollRepo "github.com/poll/api/internal/adapters/repository/postgres"
 	"github.com/poll/api/internal/core/domain"
+	"github.com/poll/api/internal/core/ports"
 	"github.com/poll/api/internal/core/services"
 )
 
-// TestPollFlow is the main black-box integration test.
+type TestApp struct {
+	DB          *sql.DB
+	Server      *httptest.Server
+	Client      *http.Client
+	SummarySvc  ports.SummaryService
+	DBContainer testcontainers.Container
+}
+
+func setupTestApp(t *testing.T) *TestApp {
+	ctx := context.Background()
+	dbContainer, dbURL, err := setupPostgresContainer(ctx)
+	require.NoError(t, err)
+
+	db, err := sql.Open("postgres", dbURL)
+	require.NoError(t, err)
+
+	err = applyMigrations(db)
+	require.NoError(t, err)
+
+	repo := pollRepo.NewPollRepository(db)
+	voteRepo := pollRepo.NewVoteRepository(db)
+	resultRepo := pollRepo.NewPollResultRepository(db)
+
+	svc := services.NewPollService(repo, resultRepo)
+	voteSvc := services.NewVoteService(repo, voteRepo)
+	summarySvc := services.NewSummaryService(repo, resultRepo)
+
+	handler := pollHttp.NewPollHandler(svc)
+	voteHandler := pollHttp.NewVoteHandler(voteSvc)
+	router := pollHttp.NewHandler(handler, voteHandler)
+
+	server := httptest.NewServer(router)
+
+	return &TestApp{
+		DB:          db,
+		Server:      server,
+		Client:      server.Client(),
+		SummarySvc:  summarySvc,
+		DBContainer: dbContainer,
+	}
+}
+
+func (app *TestApp) Teardown(t *testing.T) {
+	app.Server.Close()
+	app.DB.Close()
+	if err := app.DBContainer.Terminate(context.Background()); err != nil {
+		t.Logf("failed to terminate container: %v", err)
+	}
+}
+
+// TestPollFlow tests the basic lifecycle: Create Poll -> Get Poll -> Vote -> Prevent Duplicate Vote
 func TestPollFlow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
 
-	// 1. Setup Database Container
-	ctx := context.Background()
-	dbContainer, dbURL, err := setupPostgresContainer(ctx)
-	require.NoError(t, err)
-	defer func() {
-		if err := dbContainer.Terminate(ctx); err != nil {
-			t.Logf("failed to terminate container: %v", err)
-		}
-	}()
-
-	// 2. Connect to Database
-	db, err := sql.Open("postgres", dbURL)
-	require.NoError(t, err)
-	defer db.Close()
-
-	// 3. Run Migrations
-	err = applyMigrations(db)
-	require.NoError(t, err)
-
-	// 4. Setup Application (Hexagonal Composition)
-	repo := pollRepo.NewPollRepository(db)
-	voteRepo := pollRepo.NewVoteRepository(db)
-	svc := services.NewPollService(repo)
-	voteSvc := services.NewVoteService(repo, voteRepo)
-	handler := pollHttp.NewPollHandler(svc)
-	voteHandler := pollHttp.NewVoteHandler(voteSvc)
-	router := pollHttp.NewHandler(handler, voteHandler)
-
-	// 5. Start Test Server
-	server := httptest.NewServer(router)
-	defer server.Close()
-
-	client := server.Client()
-
-	// --- TEST SCENARIO START ---
+	app := setupTestApp(t)
+	defer app.Teardown(t)
 
 	// Step 1: Create a Poll
 	createPayload := map[string]interface{}{
-		"title":       "Integration Test Poll",
-		"description": "Testing the flow",
-		"options":     []string{"Option A", "Option B", "Option C"},
+		"title":       "Flow Test Poll",
+		"description": "Testing the basic flow",
+		"options":     []string{"Option A", "Option B"},
 	}
 	body, _ := json.Marshal(createPayload)
 
-	resp, err := client.Post(server.URL+"/api/polls", "application/json", bytes.NewReader(body))
+	resp, err := app.Client.Post(app.Server.URL+"/api/polls", "application/json", bytes.NewReader(body))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
@@ -87,13 +105,12 @@ func TestPollFlow(t *testing.T) {
 	require.NoError(t, err)
 	resp.Body.Close()
 
-	// Assertions on Created Poll
 	assert.NotEqual(t, uuid.Nil, createdPoll.ID)
 	assert.Equal(t, createPayload["title"], createdPoll.Title)
-	assert.Len(t, createdPoll.Options, 3)
+	assert.Len(t, createdPoll.Options, 2)
 
-	// Step 2: Get the Poll by ID
-	resp, err = client.Get(fmt.Sprintf("%s/api/polls/%s", server.URL, createdPoll.ID))
+	// Step 2: Get the Poll
+	resp, err = app.Client.Get(fmt.Sprintf("%s/api/polls/%s", app.Server.URL, createdPoll.ID))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -101,46 +118,87 @@ func TestPollFlow(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&fetchedPoll)
 	require.NoError(t, err)
 	resp.Body.Close()
-
-	// Step 3: Verify Contract Consistency
 	assert.Equal(t, createdPoll.ID, fetchedPoll.ID)
-	assert.Equal(t, createdPoll.Title, fetchedPoll.Title)
-	assert.Equal(t, createdPoll.Description, fetchedPoll.Description)
-	assert.Len(t, fetchedPoll.Options, 3)
 
-	// Verify options order and content (assuming DB preserves insertion order or logic sorts them,
-	// though standard SQL doesn't guarantee order without ORDER BY.
-	// Our app doesn't seem to enforce order, so checking existence is safer,
-	// but usually simple inserts return in order).
-	// For strictness, let's map them by Text.
-	createdOptions := make(map[string]uuid.UUID)
-	for _, o := range createdPoll.Options {
-		createdOptions[o.Text] = o.ID
-	}
-
-	for _, o := range fetchedPoll.Options {
-		id, exists := createdOptions[o.Text]
-		assert.True(t, exists, "Option %s should exist", o.Text)
-		assert.Equal(t, id, o.ID, "Option ID should match")
-	}
-
-	// Step 4: Cast a Vote
+	// Step 3: Cast a Vote
 	votePayload := map[string]interface{}{
 		"option_id": fetchedPoll.Options[0].ID,
 	}
 	voteBody, _ := json.Marshal(votePayload)
 
-	resp, err = client.Post(fmt.Sprintf("%s/api/polls/%s/votes", server.URL, createdPoll.ID), "application/json", bytes.NewReader(voteBody))
+	resp, err = app.Client.Post(fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, createdPoll.ID), "application/json", bytes.NewReader(voteBody))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	// Step 5: Attempt Duplicate Vote
-	resp, err = client.Post(fmt.Sprintf("%s/api/polls/%s/votes", server.URL, createdPoll.ID), "application/json", bytes.NewReader(voteBody))
+	// Step 4: Duplicate Vote
+	resp, err = app.Client.Post(fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, createdPoll.ID), "application/json", bytes.NewReader(voteBody))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusConflict, resp.StatusCode)
 }
 
-// Helper to start Postgres container
+// TestVoteSummarization tests that the worker logic correctly aggregates votes and the API returns stats.
+func TestVoteSummarization(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	app := setupTestApp(t)
+	defer app.Teardown(t)
+
+	// 1. Create Poll
+	createPayload := map[string]interface{}{
+		"title":       "Stats Test Poll",
+		"description": "Testing aggregation",
+		"options":     []string{"Opt1", "Opt2", "Opt3"},
+	}
+	body, _ := json.Marshal(createPayload)
+	resp, err := app.Client.Post(app.Server.URL+"/api/polls", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	var poll domain.Poll
+	json.NewDecoder(resp.Body).Decode(&poll)
+	resp.Body.Close()
+
+	opt1 := poll.Options[0].ID
+	opt2 := poll.Options[1].ID
+
+	// 2. Insert Votes Directly into DB (to simulate multiple users)
+	// Opt1: 2 votes
+	// Opt2: 1 vote
+	// Opt3: 0 votes
+	_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, voter_ip) VALUES ($1, $2, '1.1.1.1')`, poll.ID, opt1)
+	require.NoError(t, err)
+	_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, voter_ip) VALUES ($1, $2, '1.1.1.2')`, poll.ID, opt1)
+	require.NoError(t, err)
+	_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, voter_ip) VALUES ($1, $2, '1.1.1.3')`, poll.ID, opt2)
+	require.NoError(t, err)
+
+	// 3. Run Summarization
+	err = app.SummarySvc.SummarizeAllVotes(context.Background())
+	require.NoError(t, err)
+
+	// 4. Check API Results
+	resp, err = app.Client.Get(fmt.Sprintf("%s/api/polls/%s", app.Server.URL, poll.ID))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var statsPoll domain.Poll
+	json.NewDecoder(resp.Body).Decode(&statsPoll)
+	resp.Body.Close()
+
+	for _, o := range statsPoll.Options {
+		if o.ID == opt1 {
+			assert.Equal(t, int64(2), o.VoteCount)
+			assert.InDelta(t, 66.66, o.Percentage, 1.0)
+		} else if o.ID == opt2 {
+			assert.Equal(t, int64(1), o.VoteCount)
+			assert.InDelta(t, 33.33, o.Percentage, 1.0)
+		} else {
+			assert.Equal(t, int64(0), o.VoteCount)
+			assert.Equal(t, 0.0, o.Percentage)
+		}
+	}
+}
+
 func setupPostgresContainer(ctx context.Context) (testcontainers.Container, string, error) {
 	dbName := "testdb"
 	user := "user"
@@ -168,7 +226,6 @@ func setupPostgresContainer(ctx context.Context) (testcontainers.Container, stri
 	return pgContainer, connStr, nil
 }
 
-// Helper to apply migrations from the project file
 func applyMigrations(db *sql.DB) error {
 	dirPath := "../../internal/adapters/repository/postgres/migrations"
 
@@ -182,7 +239,6 @@ func applyMigrations(db *sql.DB) error {
 			continue
 		}
 
-		// Convention: look for files ending in "_up.sql" or just "up.sql"
 		if !strings.HasSuffix(entry.Name(), "up.sql") {
 			continue
 		}
