@@ -67,3 +67,31 @@ jobs:
           tags: |
             vncsmyrnk/poll-vote-summary-generator:latest
             vncsmyrnk/poll-vote-summary-generator:${{ github.sha }}
+
+  # https://github.com/google-github-actions/example-workflows/blob/main/workflows/deploy-cloudrun/cloudrun-docker.yml
+  deploy-to-cloud-run:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [build-api-docker-image, build-vote-summary-generator-docker-image]
+    environment:
+      name: cloud-run
+      url: https://poll-api.vncsmyrnk.dev
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v3'
+        with:
+          project_id: ${{ secrets.PROJECT_ID }}
+          workload_identity_provider: '${{ secrets.WIF_PROVIDER }}'
+          service_account: '${{ secrets.WIF_SERVICE_ACCOUNT }}'
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: ${{ vars.SERVICE }}
+          region: ${{ vars.REGION }}
+          image: vncsmyrnk/poll-api:${{ github.sha }}
