@@ -10,6 +10,12 @@ run-server:
 run-vote-summary-generator:
   go run cmd/votesummarygenerator/main.go
 
+run-sql-db file:
+  #!/usr/bin/env bash
+  source .env
+  PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" \
+    -h "$POSTGRES_HOST" -d "$POSTGRES_DB" -p "$POSTGRES_PORT" -f {{file}}
+
 build-and-run-api-image:
   docker build --target api -t poll-api .
   docker compose up -d
