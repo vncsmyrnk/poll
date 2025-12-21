@@ -12,7 +12,7 @@ COPY . .
 RUN go build -o /app/bin/api ./cmd/server/main.go
 
 # Build Vote Summarizing
-RUN go build -o /app/bin/votesummarizing ./cmd/votesummarizing/main.go
+RUN go build -o /app/bin/votesummarygenerator ./cmd/votesummarygenerator/main.go
 
 # API Image
 FROM alpine:latest AS api
@@ -23,9 +23,9 @@ USER nonroot
 CMD ["./api"]
 
 # Worker Image
-FROM alpine:latest AS votesummarizing
+FROM alpine:latest AS vote-summary-generator
 RUN addgroup -S nonroot && adduser -S nonroot -G nonroot
 WORKDIR /app
-COPY --from=builder /app/bin/votesummarizing .
+COPY --from=builder /app/bin/votesummarygenerator .
 USER nonroot
-CMD ["./votesummarizing"]
+CMD ["./votesummarygenerator"]

@@ -17,12 +17,12 @@ build-and-run-api-image:
     poll-api
 
 build-and-run-summarizer-image:
-  docker build --target votesummarizing -t poll-vote-summarizing .
+  docker build --target vote-summary-generator -t poll-vote-summary-generator .
   docker compose up -d
   docker run -it --rm \
     --network host \
     --env-file ./.env \
-    poll-vote-summarizing
+    poll-vote-summary-generator
 
 test:
   go test -v ./test/integration/...
