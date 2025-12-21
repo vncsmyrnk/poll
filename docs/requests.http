@@ -1,0 +1,39 @@
+### Gets the top polls
+
+GET https://poll-api.vncsmyrnk.dev/api/polls HTTP/1.1
+
+
+### Queries for polls matching a query
+
+GET https://poll-api.vncsmyrnk.dev/api/polls?q=editor HTTP/1.1
+
+
+### Create a poll
+
+POST https://poll-api.vncsmyrnk.dev/api/polls HTTP/1.1
+
+{
+  "description": "...",
+  "options": [
+    "Movie 1",
+    "Movie 2",
+    "Movie 3",
+    "Movie 4",
+    "Movie 5"
+  ],
+  "title": "Whats the best movie of 2025?"
+}
+
+
+### Gets a poll by ID
+
+GET https://poll-api.vncsmyrnk.dev/api/polls/f87fe4b5-afad-4498-ae18-42e9e0635fba HTTP/1.1
+
+
+### Casts a vote on a poll
+
+POST https://poll-api.vncsmyrnk.dev/api/polls/f87fe4b5-afad-4498-ae18-42e9e0635fba/votes HTTP/1.1
+
+{
+  "option_id": "d275212d-8590-4767-9905-d7ec1915dcc6"
+}
