@@ -1,0 +1,46 @@
+name: CI workflow
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  packages: write
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    container: golang:1.25-alpine
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: extractions/setup-just@v2
+
+      - name: Run API integration tests
+        run: just test
+
+  build-api-docker-image:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          target: api
+          tags: |
+            vncsmyrnk/poll-api:latest
+            vncsmyrnk/poll-api:${{ github.sha }}
