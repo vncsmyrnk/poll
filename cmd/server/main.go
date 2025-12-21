@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"flag"
 	"fmt"
 	"log"
 	stdhttp "net/http"
@@ -25,14 +24,11 @@ func main() {
 		log.Println("No .env file found")
 	}
 
-	var dbHost, dbPort, dbUser, dbPass, dbName string
-
-	flag.StringVar(&dbHost, "db-host", os.Getenv("POSTGRES_HOST"), "Database host")
-	flag.StringVar(&dbPort, "db-port", os.Getenv("POSTGRES_PORT"), "Database port")
-	flag.StringVar(&dbUser, "db-user", os.Getenv("POSTGRES_USER"), "Database user")
-	flag.StringVar(&dbPass, "db-pass", os.Getenv("POSTGRES_PASSWORD"), "Database password")
-	flag.StringVar(&dbName, "db-name", os.Getenv("POSTGRES_DB"), "Database name")
-	flag.Parse()
+	dbHost := os.Getenv("POSTGRES_HOST")
+	dbPort := os.Getenv("POSTGRES_PORT")
+	dbUser := os.Getenv("POSTGRES_USER")
+	dbPass := os.Getenv("POSTGRES_PASSWORD")
+	dbName := os.Getenv("POSTGRES_DB")
 
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", dbUser, dbPass, dbHost, dbPort, dbName)
 	db, err := sql.Open("postgres", connStr)
