@@ -10,8 +10,9 @@ This project provides pre-built Docker images and a `docker-compose` setup for e
 
 ## ☁️ Cloud Environment
 
-We offer a managed cloud environment for users who prefer a hosted solution.
-Visit [poll.vncsmyrnk.dev](https://poll.vncsmyrnk.dev) to get started with the managed API.
+We offer a managed cloud environment for users who prefer a hosted solution. Visit the client environment at [poll.vncsmyrnk.dev](https://poll.vncsmyrnk.dev) to see the pratical use of the REST WEB API.
+
+The cloud environment levarages GCP, Cloud Run and Supabase.
 
 ## 🛠️ Development
 
