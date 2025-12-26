@@ -8,11 +8,13 @@ import (
 
 type AuthHandler struct {
 	authService ports.AuthService
+	redirectURL string
 }
 
-func NewAuthHandler(authService ports.AuthService) *AuthHandler {
+func NewAuthHandler(authService ports.AuthService, redirectURL string) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
+		redirectURL: redirectURL,
 	}
 }
 
@@ -41,7 +43,7 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	h.setAccessTokenCookie(w, accessToken)
 	h.setRefreshTokenCookie(w, refreshToken)
 
-	http.Redirect(w, r, "https://poll.vncsmyrnk.dev", http.StatusSeeOther)
+	http.Redirect(w, r, h.redirectURL, http.StatusSeeOther)
 }
 
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {

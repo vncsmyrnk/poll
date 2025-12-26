@@ -9,6 +9,7 @@ import (
 	stdhttp "net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -50,11 +51,24 @@ func main() {
 	voteService := services.NewVoteService(pollRepo, voteRepo)
 	authService := services.NewAuthService(userRepo, authRepo, verifier)
 
+	redirectURL := os.Getenv("AUTH_REDIRECT_URL")
+	if redirectURL == "" {
+		redirectURL = "https://poll.vncsmyrnk.dev"
+	}
+
 	pollHandler := http.NewPollHandler(pollService)
 	voteHandler := http.NewVoteHandler(voteService)
-	authHandler := http.NewAuthHandler(authService)
+	authHandler := http.NewAuthHandler(authService, redirectURL)
 
-	handler := http.NewHandler(pollHandler, voteHandler, authHandler)
+	corsOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
+	var allowedOrigins []string
+	if corsOrigins != "" {
+		allowedOrigins = strings.Split(corsOrigins, ",")
+	} else {
+		allowedOrigins = []string{"https://poll.vncsmyrnk.dev"}
+	}
+
+	handler := http.NewHandler(pollHandler, voteHandler, authHandler, allowedOrigins)
 
 	server := &stdhttp.Server{Addr: "0.0.0.0:8080", Handler: handler}
 

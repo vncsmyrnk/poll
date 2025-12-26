@@ -7,10 +7,10 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func NewHandler(pollHandler *PollHandler, voteHandler *VoteHandler, authHandler *AuthHandler) http.Handler {
+func NewHandler(pollHandler *PollHandler, voteHandler *VoteHandler, authHandler *AuthHandler, allowedOrigins []string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
-	r.Use(CorsMiddleware)
+	r.Use(NewCorsMiddleware(allowedOrigins))
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/polls", func(r chi.Router) {

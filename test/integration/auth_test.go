@@ -56,8 +56,8 @@ func setupAuthTestApp(t *testing.T) *TestApp {
 
 	pollHandler := handler.NewPollHandler(svc)
 	voteHandler := handler.NewVoteHandler(voteSvc)
-	authHandler := handler.NewAuthHandler(authSvc)
-	router := handler.NewHandler(pollHandler, voteHandler, authHandler)
+	authHandler := handler.NewAuthHandler(authSvc, "https://example.com/redirect")
+	router := handler.NewHandler(pollHandler, voteHandler, authHandler, []string{"*"})
 
 	server := httptest.NewServer(router)
 
@@ -82,19 +82,20 @@ func TestAuthFlow(t *testing.T) {
 	form := url.Values{}
 	form.Add("credential", "valid_token")
 
-	resp, err := app.Client.PostForm(app.Server.URL+"/oauth/callback", form)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
+	// Configure client to NOT follow redirects to check cookies and location
 	app.Client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
 
-	resp, err = app.Client.PostForm(app.Server.URL+"/oauth/callback", form)
+	resp, err := app.Client.PostForm(app.Server.URL+"/oauth/callback", form)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	require.Equal(t, http.StatusSeeOther, resp.StatusCode)
+
+	location, err := resp.Location()
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/redirect", location.String())
 
 	// Check Cookies
 	var accessToken, refreshToken string
