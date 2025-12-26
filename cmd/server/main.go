@@ -45,7 +45,7 @@ func main() {
 
 	pollService := services.NewPollService(pollRepo, resultRepo)
 	voteService := services.NewVoteService(pollRepo, voteRepo)
-	authService := services.NewAuthService(userRepo, authRepo)
+	authService := services.NewAuthService(userRepo, authRepo, nil)
 
 	pollHandler := http.NewPollHandler(pollService)
 	voteHandler := http.NewVoteHandler(voteService)

@@ -6,6 +6,14 @@ import (
 	"github.com/poll/api/internal/core/domain"
 )
 
+type TokenVerifier interface {
+	Verify(ctx context.Context, token string, clientID string) (*TokenPayload, error)
+}
+
+type TokenPayload struct {
+	Email string
+}
+
 type AuthRepository interface {
 	StoreRefreshToken(ctx context.Context, token *domain.RefreshToken) error
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (*domain.RefreshToken, error)
@@ -13,6 +21,6 @@ type AuthRepository interface {
 }
 
 type AuthService interface {
-	LoginWithGoogle(ctx context.Context, googleToken string) (string, string, error) // returns access_token, refresh_token, error
-	RefreshAccessToken(ctx context.Context, refreshToken string) (string, string, error) // returns new access_token, new refresh_token (optional, implementation specific)
+	LoginWithGoogle(ctx context.Context, googleToken string) (string, string, error)
+	RefreshAccessToken(ctx context.Context, refreshToken string) (string, string, error)
 }

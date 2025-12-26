@@ -9,21 +9,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
-	pollHttp "github.com/poll/api/internal/adapters/handler/http"
-	pollRepo "github.com/poll/api/internal/adapters/repository/postgres"
+	handler "github.com/poll/api/internal/adapters/handler/http"
+	repo "github.com/poll/api/internal/adapters/repository/postgres"
 	"github.com/poll/api/internal/core/domain"
 	"github.com/poll/api/internal/core/ports"
 	"github.com/poll/api/internal/core/services"
@@ -38,6 +35,7 @@ type TestApp struct {
 }
 
 func setupTestApp(t *testing.T) *TestApp {
+	os.Setenv("JWT_SECRET", "test-secret")
 	ctx := context.Background()
 	dbContainer, dbURL, err := setupPostgresContainer(ctx)
 	require.NoError(t, err)
@@ -48,17 +46,21 @@ func setupTestApp(t *testing.T) *TestApp {
 	err = applyMigrations(db)
 	require.NoError(t, err)
 
-	repo := pollRepo.NewPollRepository(db)
-	voteRepo := pollRepo.NewVoteRepository(db)
-	resultRepo := pollRepo.NewPollResultRepository(db)
+	pollRepo := repo.NewPollRepository(db)
+	voteRepo := repo.NewVoteRepository(db)
+	resultRepo := repo.NewPollResultRepository(db)
+	authRepo := repo.NewAuthRepository(db)
+	userRepo := repo.NewUserRepository(db)
 
-	svc := services.NewPollService(repo, resultRepo)
-	voteSvc := services.NewVoteService(repo, voteRepo)
-	summarySvc := services.NewSummaryService(repo, resultRepo)
+	svc := services.NewPollService(pollRepo, resultRepo)
+	voteSvc := services.NewVoteService(pollRepo, voteRepo)
+	summarySvc := services.NewSummaryService(pollRepo, resultRepo)
+	authSvc := services.NewAuthService(userRepo, authRepo, nil)
 
-	handler := pollHttp.NewPollHandler(svc)
-	voteHandler := pollHttp.NewVoteHandler(voteSvc)
-	router := pollHttp.NewHandler(handler, voteHandler)
+	pollHandler := handler.NewPollHandler(svc)
+	voteHandler := handler.NewVoteHandler(voteSvc)
+	authHandler := handler.NewAuthHandler(authSvc)
+	router := handler.NewHandler(pollHandler, voteHandler, authHandler)
 
 	server := httptest.NewServer(router)
 
@@ -69,6 +71,25 @@ func setupTestApp(t *testing.T) *TestApp {
 		SummarySvc:  summarySvc,
 		DBContainer: dbContainer,
 	}
+}
+
+func (app *TestApp) createUserAndToken(t *testing.T) string {
+	userID := uuid.New()
+	email := fmt.Sprintf("user-%s@example.com", userID)
+	_, err := app.DB.Exec("INSERT INTO users (id, email) VALUES ($1, $2)", userID, email)
+	require.NoError(t, err)
+
+	claims := jwt.MapClaims{
+		"sub":   userID.String(),
+		"email": email,
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+		"iat":   time.Now().Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString([]byte("test-secret"))
+	require.NoError(t, err)
+	return signedToken
 }
 
 func (app *TestApp) Teardown(t *testing.T) {
@@ -126,12 +147,24 @@ func TestPollFlow(t *testing.T) {
 	}
 	voteBody, _ := json.Marshal(votePayload)
 
-	resp, err = app.Client.Post(fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, createdPoll.ID), "application/json", bytes.NewReader(voteBody))
+	token := app.createUserAndToken(t)
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, createdPoll.ID), bytes.NewReader(voteBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: token})
+
+	resp, err = app.Client.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	// Step 4: Duplicate Vote
-	resp, err = app.Client.Post(fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, createdPoll.ID), "application/json", bytes.NewReader(voteBody))
+	req, err = http.NewRequest("POST", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, createdPoll.ID), bytes.NewReader(voteBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: token})
+
+	resp, err = app.Client.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusConflict, resp.StatusCode)
 }
@@ -162,14 +195,21 @@ func TestVoteSummarization(t *testing.T) {
 	opt2 := poll.Options[1].ID
 
 	// 2. Insert Votes Directly into DB (to simulate multiple users)
+	// Create Users
+	u1 := uuid.New()
+	u2 := uuid.New()
+	u3 := uuid.New()
+	_, err = app.DB.Exec("INSERT INTO users (id, email) VALUES ($1, 'u1@ex.com'), ($2, 'u2@ex.com'), ($3, 'u3@ex.com')", u1, u2, u3)
+	require.NoError(t, err)
+
 	// Opt1: 2 votes
 	// Opt2: 1 vote
 	// Opt3: 0 votes
-	_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, voter_ip) VALUES ($1, $2, '1.1.1.1')`, poll.ID, opt1)
+	_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, user_id, voter_ip) VALUES ($1, $2, $3, '1.1.1.1')`, poll.ID, opt1, u1)
 	require.NoError(t, err)
-	_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, voter_ip) VALUES ($1, $2, '1.1.1.2')`, poll.ID, opt1)
+	_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, user_id, voter_ip) VALUES ($1, $2, $3, '1.1.1.2')`, poll.ID, opt1, u2)
 	require.NoError(t, err)
-	_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, voter_ip) VALUES ($1, $2, '1.1.1.3')`, poll.ID, opt2)
+	_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, user_id, voter_ip) VALUES ($1, $2, $3, '1.1.1.3')`, poll.ID, opt2, u3)
 	require.NoError(t, err)
 
 	// 3. Run Summarization
@@ -305,12 +345,22 @@ func TestListPollsSorted(t *testing.T) {
 	// Insert votes
 	// Poll B: 10 votes (for Opt1)
 	for i := 0; i < 10; i++ {
-		_, err := app.DB.Exec(`INSERT INTO votes (poll_id, option_id, voter_ip) VALUES ($1, (SELECT id FROM poll_options WHERE poll_id=$1 AND text='Opt1'), $2)`, polls["Poll B"], fmt.Sprintf("1.1.1.%d", i))
+		uid := uuid.New()
+		_, err := app.DB.Exec("INSERT INTO users (id, email) VALUES ($1, $2)", uid, fmt.Sprintf("u-b-%d@ex.com", i))
+		require.NoError(t, err)
+
+		_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, user_id, voter_ip)
+			VALUES ($1, (SELECT id FROM poll_options WHERE poll_id=$1 AND text='Opt1'), $2, $3)`, polls["Poll B"], uid, fmt.Sprintf("1.1.1.%d", i))
 		require.NoError(t, err)
 	}
 	// Poll C: 5 votes (for Opt1)
 	for i := 0; i < 5; i++ {
-		_, err := app.DB.Exec(`INSERT INTO votes (poll_id, option_id, voter_ip) VALUES ($1, (SELECT id FROM poll_options WHERE poll_id=$1 AND text='Opt1'), $2)`, polls["Poll C"], fmt.Sprintf("2.2.2.%d", i))
+		uid := uuid.New()
+		_, err := app.DB.Exec("INSERT INTO users (id, email) VALUES ($1, $2)", uid, fmt.Sprintf("u-c-%d@ex.com", i))
+		require.NoError(t, err)
+
+		_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, user_id, voter_ip)
+			VALUES ($1, (SELECT id FROM poll_options WHERE poll_id=$1 AND text='Opt1'), $2, $3)`, polls["Poll C"], uid, fmt.Sprintf("2.2.2.%d", i))
 		require.NoError(t, err)
 	}
 
@@ -335,63 +385,4 @@ func TestListPollsSorted(t *testing.T) {
 	assert.Equal(t, "Poll B", list[0].Title) // 10 votes
 	assert.Equal(t, "Poll C", list[1].Title) // 5 votes
 	assert.Equal(t, "Poll A", list[2].Title) // 0 votes
-}
-
-func setupPostgresContainer(ctx context.Context) (testcontainers.Container, string, error) {
-	dbName := "testdb"
-	user := "user"
-	password := "password"
-
-	pgContainer, err := postgres.Run(ctx, "postgres:15-alpine",
-		postgres.WithDatabase(dbName),
-		postgres.WithUsername(user),
-		postgres.WithPassword(password),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(5*time.Second),
-		),
-	)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to start postgres container: %w", err)
-	}
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		return nil, "", err
-	}
-
-	return pgContainer, connStr, nil
-}
-
-func applyMigrations(db *sql.DB) error {
-	dirPath := "../../internal/adapters/repository/postgres/migrations"
-
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return fmt.Errorf("failed to read migrations directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		if !strings.HasSuffix(entry.Name(), "up.sql") {
-			continue
-		}
-
-		fullPath := filepath.Join(dirPath, entry.Name())
-		content, err := os.ReadFile(fullPath)
-		if err != nil {
-			return fmt.Errorf("failed to read migration file %s: %w", entry.Name(), err)
-		}
-
-		_, err = db.Exec(string(content))
-		if err != nil {
-			return fmt.Errorf("failed to execute migration %s: %w", entry.Name(), err)
-		}
-	}
-
-	return nil
 }

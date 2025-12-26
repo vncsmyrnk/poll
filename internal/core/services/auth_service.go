@@ -17,75 +17,56 @@ import (
 	"google.golang.org/api/idtoken"
 )
 
+type GoogleVerifier struct{}
+
+func (v *GoogleVerifier) Verify(ctx context.Context, token string, clientID string) (*ports.TokenPayload, error) {
+	payload, err := idtoken.Validate(ctx, token, clientID)
+	if err != nil {
+		return nil, err
+	}
+	email, ok := payload.Claims["email"].(string)
+	if !ok {
+		return nil, errors.New("email not found in claims")
+	}
+	return &ports.TokenPayload{Email: email}, nil
+}
+
 type AuthService struct {
 	userRepo       ports.UserRepository
 	authRepo       ports.AuthRepository
+	verifier       ports.TokenVerifier
 	jwtSecret      []byte
 	googleClientID string
 }
 
-func NewAuthService(userRepo ports.UserRepository, authRepo ports.AuthRepository) *AuthService {
+func NewAuthService(userRepo ports.UserRepository, authRepo ports.AuthRepository, verifier ports.TokenVerifier) *AuthService {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		fmt.Println("Warning: JWT_SECRET not set")
 	}
 
-	clientID := os.Getenv("GOOGLE_CLIENT_ID")
+	if verifier == nil {
+		verifier = &GoogleVerifier{}
+	}
 
+	clientID := os.Getenv("GOOGLE_CLIENT_ID")
 	return &AuthService{
 		userRepo:       userRepo,
 		authRepo:       authRepo,
+		verifier:       verifier,
 		jwtSecret:      []byte(secret),
 		googleClientID: clientID,
 	}
 }
 
 func (s *AuthService) LoginWithGoogle(ctx context.Context, googleToken string) (string, string, error) {
-	payload, err := idtoken.Validate(ctx, googleToken, s.googleClientID)
+	payload, err := s.verifier.Verify(ctx, googleToken, s.googleClientID)
 	if err != nil {
 		return "", "", fmt.Errorf("invalid google token: %w", err)
 	}
 
-	email := payload.Claims["email"].(string)
-
-	user, err := s.userRepo.GetByEmail(ctx, email)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to get user: %w", err)
-	}
-
-	if user == nil {
-		user = &domain.User{
-			Email: email,
-		}
-		if err := s.userRepo.Create(ctx, user); err != nil {
-			return "", "", fmt.Errorf("failed to create user: %w", err)
-		}
-	}
-
-	accessToken, err := s.generateAccessToken(user)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to generate access token: %w", err)
-	}
-
-	refreshToken, err := s.generateRefreshToken()
-	if err != nil {
-		return "", "", fmt.Errorf("failed to generate refresh token: %w", err)
-	}
-
-	refreshTokenHash := s.hashToken(refreshToken)
-
-	rtEntity := &domain.RefreshToken{
-		UserID:    user.ID,
-		TokenHash: refreshTokenHash,
-		ExpiresAt: time.Now().Add(7 * 24 * time.Hour), // 7 days
-		Revoked:   false,
-	}
-
-	if err := s.authRepo.StoreRefreshToken(ctx, rtEntity); err != nil {
-		return "", "", fmt.Errorf("failed to store refresh token: %w", err)
-	}
-
-	return accessToken, refreshToken, nil
+	email := payload.Email
+	return s.login(ctx, email)
 }
 
 func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken string) (string, string, error) {
@@ -122,6 +103,47 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	// Optional: Rotate Refresh Token
 	// For simplicity, keep the same refresh token until expiry, or we can rotate it.
 	// Let's keep it simple for now and return the same refresh token, or empty if we don't rotate.
+
+	return accessToken, refreshToken, nil
+}
+
+func (s *AuthService) login(ctx context.Context, email string) (string, string, error) {
+	user, err := s.userRepo.GetByEmail(ctx, email)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get user: %w", err)
+	}
+
+	if user == nil {
+		user = &domain.User{
+			Email: email,
+		}
+		if err := s.userRepo.Create(ctx, user); err != nil {
+			return "", "", fmt.Errorf("failed to create user: %w", err)
+		}
+	}
+
+	accessToken, err := s.generateAccessToken(user)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate access token: %w", err)
+	}
+
+	refreshToken, err := s.generateRefreshToken()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	refreshTokenHash := s.hashToken(refreshToken)
+
+	rtEntity := &domain.RefreshToken{
+		UserID:    user.ID,
+		TokenHash: refreshTokenHash,
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour), // 7 days
+		Revoked:   false,
+	}
+
+	if err := s.authRepo.StoreRefreshToken(ctx, rtEntity); err != nil {
+		return "", "", fmt.Errorf("failed to store refresh token: %w", err)
+	}
 
 	return accessToken, refreshToken, nil
 }
