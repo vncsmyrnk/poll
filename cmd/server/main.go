@@ -56,7 +56,7 @@ func main() {
 		log.Println("AUTH_REDIRECT_URL was not set")
 	}
 
-	cookieDomain := os.Getenv("COOKIE_DOMAIN") // e.g., ".vncsmyrnk.dev"
+	cookieDomain := os.Getenv("COOKIE_DOMAIN")
 	if cookieDomain == "" {
 		log.Println("COOKIE_DOMAIN was not set")
 	}

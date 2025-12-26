@@ -46,8 +46,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, googleToken string) (
 		return "", "", fmt.Errorf("invalid google token: %w", err)
 	}
 
-	email := payload.Email
-	return s.login(ctx, email)
+	return s.login(ctx, payload.Email, payload.Name)
 }
 
 func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken string) (string, string, error) {
@@ -88,7 +87,7 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	return accessToken, refreshToken, nil
 }
 
-func (s *AuthService) login(ctx context.Context, email string) (string, string, error) {
+func (s *AuthService) login(ctx context.Context, email, name string) (string, string, error) {
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to get user: %w", err)
@@ -97,6 +96,7 @@ func (s *AuthService) login(ctx context.Context, email string) (string, string, 
 	if user == nil {
 		user = &domain.User{
 			Email: email,
+			Name:  name,
 		}
 		if err := s.userRepo.Create(ctx, user); err != nil {
 			return "", "", fmt.Errorf("failed to create user: %w", err)

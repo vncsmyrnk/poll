@@ -23,5 +23,9 @@ func (v *GoogleVerifier) Verify(ctx context.Context, token string, clientID stri
 	if !ok {
 		return nil, errors.New("email not found in claims")
 	}
-	return &ports.TokenPayload{Email: email}, nil
+	name, ok := payload.Claims["name"].(string)
+	if !ok {
+		return nil, errors.New("name not found in claims")
+	}
+	return &ports.TokenPayload{Email: email, Name: name}, nil
 }

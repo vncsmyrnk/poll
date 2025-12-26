@@ -79,7 +79,8 @@ func setupTestApp(t *testing.T) *TestApp {
 func (app *TestApp) createUserAndToken(t *testing.T) string {
 	userID := uuid.New()
 	email := fmt.Sprintf("user-%s@example.com", userID)
-	_, err := app.DB.Exec("INSERT INTO users (id, email) VALUES ($1, $2)", userID, email)
+	name := fmt.Sprintf("User %s", userID)
+	_, err := app.DB.Exec("INSERT INTO users (id, email, name) VALUES ($1, $2, $3)", userID, email, name)
 	require.NoError(t, err)
 
 	claims := jwt.MapClaims{
@@ -202,7 +203,7 @@ func TestVoteSummarization(t *testing.T) {
 	u1 := uuid.New()
 	u2 := uuid.New()
 	u3 := uuid.New()
-	_, err = app.DB.Exec("INSERT INTO users (id, email) VALUES ($1, 'u1@ex.com'), ($2, 'u2@ex.com'), ($3, 'u3@ex.com')", u1, u2, u3)
+	_, err = app.DB.Exec("INSERT INTO users (id, email, name) VALUES ($1, 'u1@ex.com', 'U1'), ($2, 'u2@ex.com', 'U2'), ($3, 'u3@ex.com', 'U3')", u1, u2, u3)
 	require.NoError(t, err)
 
 	// Opt1: 2 votes
@@ -349,7 +350,7 @@ func TestListPollsSorted(t *testing.T) {
 	// Poll B: 10 votes (for Opt1)
 	for i := 0; i < 10; i++ {
 		uid := uuid.New()
-		_, err := app.DB.Exec("INSERT INTO users (id, email) VALUES ($1, $2)", uid, fmt.Sprintf("u-b-%d@ex.com", i))
+		_, err := app.DB.Exec("INSERT INTO users (id, email, name) VALUES ($1, $2, 'User B')", uid, fmt.Sprintf("u-b-%d@ex.com", i))
 		require.NoError(t, err)
 
 		_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, user_id, voter_ip)
@@ -359,7 +360,7 @@ func TestListPollsSorted(t *testing.T) {
 	// Poll C: 5 votes (for Opt1)
 	for i := 0; i < 5; i++ {
 		uid := uuid.New()
-		_, err := app.DB.Exec("INSERT INTO users (id, email) VALUES ($1, $2)", uid, fmt.Sprintf("u-c-%d@ex.com", i))
+		_, err := app.DB.Exec("INSERT INTO users (id, email, name) VALUES ($1, $2, 'User C')", uid, fmt.Sprintf("u-c-%d@ex.com", i))
 		require.NoError(t, err)
 
 		_, err = app.DB.Exec(`INSERT INTO votes (poll_id, option_id, user_id, voter_ip)

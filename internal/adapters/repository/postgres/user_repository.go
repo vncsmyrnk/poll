@@ -18,9 +18,9 @@ func NewUserRepository(db *sql.DB) ports.UserRepository {
 }
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
-	query := `SELECT id, email, created_at FROM users WHERE email = $1 AND deleted_at IS NULL`
+	query := `SELECT id, email, name, created_at FROM users WHERE email = $1 AND deleted_at IS NULL`
 	user := &domain.User{}
-	err := r.db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.CreatedAt)
+	err := r.db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.Name, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -31,9 +31,9 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
-	query := `SELECT id, email, created_at FROM users WHERE id = $1 AND deleted_at IS NULL`
+	query := `SELECT id, email, name, created_at FROM users WHERE id = $1 AND deleted_at IS NULL`
 	user := &domain.User{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&user.ID, &user.Email, &user.CreatedAt)
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&user.ID, &user.Email, &user.Name, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -44,8 +44,8 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 }
 
 func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
-	query := `INSERT INTO users (email) VALUES ($1) RETURNING id, created_at`
-	err := r.db.QueryRowContext(ctx, query, user.Email).Scan(&user.ID, &user.CreatedAt)
+	query := `INSERT INTO users (email, name) VALUES ($1, $2) RETURNING id, created_at`
+	err := r.db.QueryRowContext(ctx, query, user.Email, user.Name).Scan(&user.ID, &user.CreatedAt)
 	if err != nil {
 		return err
 	}

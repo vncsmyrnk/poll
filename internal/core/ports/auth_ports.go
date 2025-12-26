@@ -12,6 +12,7 @@ type TokenVerifier interface {
 
 type TokenPayload struct {
 	Email string
+	Name  string
 }
 
 type AuthRepository interface {

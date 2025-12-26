@@ -25,7 +25,7 @@ type MockVerifier struct {
 
 func (v *MockVerifier) Verify(ctx context.Context, token string, clientID string) (*ports.TokenPayload, error) {
 	if token == "valid_token" {
-		return &ports.TokenPayload{Email: v.email}, nil
+		return &ports.TokenPayload{Email: v.email, Name: "Test User"}, nil
 	}
 	return nil, assert.AnError
 }
