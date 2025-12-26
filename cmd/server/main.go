@@ -15,6 +15,7 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/poll/api/internal/adapters/handler/http"
+	"github.com/poll/api/internal/adapters/oauth/google"
 	"github.com/poll/api/internal/adapters/repository/postgres"
 	"github.com/poll/api/internal/core/services"
 )
@@ -43,9 +44,11 @@ func main() {
 	userRepo := postgres.NewUserRepository(db)
 	authRepo := postgres.NewAuthRepository(db)
 
+	verifier := google.NewVerifier()
+
 	pollService := services.NewPollService(pollRepo, resultRepo)
 	voteService := services.NewVoteService(pollRepo, voteRepo)
-	authService := services.NewAuthService(userRepo, authRepo, nil)
+	authService := services.NewAuthService(userRepo, authRepo, verifier)
 
 	pollHandler := http.NewPollHandler(pollService)
 	voteHandler := http.NewVoteHandler(voteService)

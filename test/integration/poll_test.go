@@ -55,7 +55,10 @@ func setupTestApp(t *testing.T) *TestApp {
 	svc := services.NewPollService(pollRepo, resultRepo)
 	voteSvc := services.NewVoteService(pollRepo, voteRepo)
 	summarySvc := services.NewSummaryService(pollRepo, resultRepo)
-	authSvc := services.NewAuthService(userRepo, authRepo, nil)
+
+	// Use MockVerifier (defined in auth_test.go)
+	mockVerifier := &MockVerifier{email: "test@example.com"}
+	authSvc := services.NewAuthService(userRepo, authRepo, mockVerifier)
 
 	pollHandler := handler.NewPollHandler(svc)
 	voteHandler := handler.NewVoteHandler(voteSvc)

@@ -14,53 +14,34 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/poll/api/internal/core/domain"
 	"github.com/poll/api/internal/core/ports"
-	"google.golang.org/api/idtoken"
 )
 
-type GoogleVerifier struct{}
-
-func (v *GoogleVerifier) Verify(ctx context.Context, token string, clientID string) (*ports.TokenPayload, error) {
-	payload, err := idtoken.Validate(ctx, token, clientID)
-	if err != nil {
-		return nil, err
-	}
-	email, ok := payload.Claims["email"].(string)
-	if !ok {
-		return nil, errors.New("email not found in claims")
-	}
-	return &ports.TokenPayload{Email: email}, nil
-}
-
 type AuthService struct {
-	userRepo       ports.UserRepository
-	authRepo       ports.AuthRepository
-	verifier       ports.TokenVerifier
-	jwtSecret      []byte
-	googleClientID string
+	userRepo            ports.UserRepository
+	authRepo            ports.AuthRepository
+	googleTokenVerifier ports.TokenVerifier
+	jwtSecret           []byte
+	googleClientID      string
 }
 
-func NewAuthService(userRepo ports.UserRepository, authRepo ports.AuthRepository, verifier ports.TokenVerifier) *AuthService {
+func NewAuthService(userRepo ports.UserRepository, authRepo ports.AuthRepository, googleTokenVerifier ports.TokenVerifier) *AuthService {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		fmt.Println("Warning: JWT_SECRET not set")
 	}
 
-	if verifier == nil {
-		verifier = &GoogleVerifier{}
-	}
-
 	clientID := os.Getenv("GOOGLE_CLIENT_ID")
 	return &AuthService{
-		userRepo:       userRepo,
-		authRepo:       authRepo,
-		verifier:       verifier,
-		jwtSecret:      []byte(secret),
-		googleClientID: clientID,
+		userRepo:            userRepo,
+		authRepo:            authRepo,
+		googleTokenVerifier: googleTokenVerifier,
+		jwtSecret:           []byte(secret),
+		googleClientID:      clientID,
 	}
 }
 
 func (s *AuthService) LoginWithGoogle(ctx context.Context, googleToken string) (string, string, error) {
-	payload, err := s.verifier.Verify(ctx, googleToken, s.googleClientID)
+	payload, err := s.googleTokenVerifier.Verify(ctx, googleToken, s.googleClientID)
 	if err != nil {
 		return "", "", fmt.Errorf("invalid google token: %w", err)
 	}
