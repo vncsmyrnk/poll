@@ -40,12 +40,18 @@ func main() {
 	pollRepo := postgres.NewPollRepository(db)
 	voteRepo := postgres.NewVoteRepository(db)
 	resultRepo := postgres.NewPollResultRepository(db)
+	userRepo := postgres.NewUserRepository(db)
+	authRepo := postgres.NewAuthRepository(db)
+
 	pollService := services.NewPollService(pollRepo, resultRepo)
 	voteService := services.NewVoteService(pollRepo, voteRepo)
+	authService := services.NewAuthService(userRepo, authRepo)
 
 	pollHandler := http.NewPollHandler(pollService)
 	voteHandler := http.NewVoteHandler(voteService)
-	handler := http.NewHandler(pollHandler, voteHandler)
+	authHandler := http.NewAuthHandler(authService)
+
+	handler := http.NewHandler(pollHandler, voteHandler, authHandler)
 
 	server := &stdhttp.Server{Addr: "0.0.0.0:8080", Handler: handler}
 
