@@ -25,11 +25,11 @@ func NewHandler(pollHandler *PollHandler, voteHandler *VoteHandler, authHandler 
 
 	r.Route("/oauth", func(r chi.Router) {
 		r.Post("/callback", authHandler.GoogleCallback)
-		r.Post("/refresh", authHandler.Refresh)
 	})
 
 	r.Route("/auth", func(r chi.Router) {
 		r.Post("/logout", authHandler.Logout)
+		r.Post("/refresh", authHandler.Refresh)
 	})
 
 	return r

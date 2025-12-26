@@ -111,7 +111,7 @@ func TestAuthFlow(t *testing.T) {
 	// Wait a bit just to be sure
 	time.Sleep(1200 * time.Millisecond)
 
-	req, err := http.NewRequest("POST", app.Server.URL+"/oauth/refresh", nil)
+	req, err := http.NewRequest("POST", app.Server.URL+"/auth/refresh", nil)
 	require.NoError(t, err)
 	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: refreshToken})
 
@@ -149,7 +149,7 @@ func TestAuthFlow_Invalid(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
 	// Invalid Refresh Token
-	req, err := http.NewRequest("POST", app.Server.URL+"/oauth/refresh", nil)
+	req, err := http.NewRequest("POST", app.Server.URL+"/auth/refresh", nil)
 	require.NoError(t, err)
 	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "garbage"})
 
@@ -209,7 +209,7 @@ func TestLogout(t *testing.T) {
 	assert.True(t, refreshExpired, "refresh_token should be expired")
 
 	// 3. Try to Refresh (Should Fail)
-	req, err = http.NewRequest("POST", app.Server.URL+"/oauth/refresh", nil)
+	req, err = http.NewRequest("POST", app.Server.URL+"/auth/refresh", nil)
 	require.NoError(t, err)
 	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: refreshToken})
 
