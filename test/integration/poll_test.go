@@ -49,21 +49,14 @@ func setupTestApp(t *testing.T) *TestApp {
 	pollRepo := repo.NewPollRepository(db)
 	voteRepo := repo.NewVoteRepository(db)
 	resultRepo := repo.NewPollResultRepository(db)
-	authRepo := repo.NewAuthRepository(db)
-	userRepo := repo.NewUserRepository(db)
 
 	svc := services.NewPollService(pollRepo, resultRepo)
 	voteSvc := services.NewVoteService(pollRepo, voteRepo)
 	summarySvc := services.NewSummaryService(pollRepo, resultRepo)
 
-	// Use MockVerifier (defined in auth_test.go)
-	mockVerifier := &MockVerifier{email: "test@example.com"}
-	authSvc := services.NewAuthService(userRepo, authRepo, mockVerifier)
-
 	pollHandler := handler.NewPollHandler(svc)
 	voteHandler := handler.NewVoteHandler(voteSvc)
-	authHandler := handler.NewAuthHandler(authSvc, "https://example.com/redirect", "", http.SameSiteLaxMode)
-	router := handler.NewHandler(pollHandler, voteHandler, authHandler, []string{"*"})
+	router := handler.NewHandler(pollHandler, voteHandler, nil, nil, []string{"*"})
 
 	server := httptest.NewServer(router)
 
@@ -151,7 +144,7 @@ func TestPollFlow(t *testing.T) {
 	}
 	voteBody, _ := json.Marshal(votePayload)
 
-	token := app.createUserAndToken(t)
+	token := createUserAndToken(t, app.DB)
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, createdPoll.ID), bytes.NewReader(voteBody))
 	require.NoError(t, err)

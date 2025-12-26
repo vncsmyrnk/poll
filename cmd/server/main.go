@@ -50,6 +50,7 @@ func main() {
 	pollService := services.NewPollService(pollRepo, resultRepo)
 	voteService := services.NewVoteService(pollRepo, voteRepo)
 	authService := services.NewAuthService(userRepo, authRepo, verifier)
+	userService := services.NewUserService(userRepo)
 
 	redirectURL := os.Getenv("AUTH_REDIRECT_URL")
 	if redirectURL == "" {
@@ -72,6 +73,7 @@ func main() {
 	pollHandler := http.NewPollHandler(pollService)
 	voteHandler := http.NewVoteHandler(voteService)
 	authHandler := http.NewAuthHandler(authService, redirectURL, cookieDomain, sameSiteMode)
+	userHandler := http.NewUserHandler(userService)
 
 	corsOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	var allowedOrigins []string
@@ -81,7 +83,7 @@ func main() {
 		allowedOrigins = []string{"https://poll.vncsmyrnk.dev"}
 	}
 
-	handler := http.NewHandler(pollHandler, voteHandler, authHandler, allowedOrigins)
+	handler := http.NewHandler(pollHandler, voteHandler, authHandler, userHandler, allowedOrigins)
 
 	server := &stdhttp.Server{Addr: "0.0.0.0:8080", Handler: handler}
 

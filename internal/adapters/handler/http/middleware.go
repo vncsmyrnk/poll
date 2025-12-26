@@ -71,7 +71,6 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// 3. Store UserID in Context
 		ctx := context.WithValue(r.Context(), UserIDKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

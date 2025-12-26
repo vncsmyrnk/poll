@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
@@ -21,16 +22,18 @@ import (
 // MockVerifier for testing
 type MockVerifier struct {
 	email string
+	name  string
 }
 
 func (v *MockVerifier) Verify(ctx context.Context, token string, clientID string) (*ports.TokenPayload, error) {
 	if token == "valid_token" {
-		return &ports.TokenPayload{Email: v.email, Name: "Test User"}, nil
+		return &ports.TokenPayload{Email: v.email, Name: v.name}, nil
 	}
 	return nil, assert.AnError
 }
 
 func setupAuthTestApp(t *testing.T) *TestApp {
+	os.Setenv("JWT_SECRET", "test-secret")
 	ctx := context.Background()
 	dbContainer, dbURL, err := setupPostgresContainer(ctx)
 	require.NoError(t, err)
@@ -41,23 +44,16 @@ func setupAuthTestApp(t *testing.T) *TestApp {
 	err = applyMigrations(db)
 	require.NoError(t, err)
 
-	pollRepo := repo.NewPollRepository(db)
-	voteRepo := repo.NewVoteRepository(db)
-	resultRepo := repo.NewPollResultRepository(db)
 	authRepo := repo.NewAuthRepository(db)
 	userRepo := repo.NewUserRepository(db)
 
-	svc := services.NewPollService(pollRepo, resultRepo)
-	voteSvc := services.NewVoteService(pollRepo, voteRepo)
-	summarySvc := services.NewSummaryService(pollRepo, resultRepo)
-
-	mockVerifier := &MockVerifier{email: "test@example.com"}
+	mockVerifier := &MockVerifier{email: "test@example.com", name: "Test user"}
 	authSvc := services.NewAuthService(userRepo, authRepo, mockVerifier)
+	userSvc := services.NewUserService(userRepo)
 
-	pollHandler := handler.NewPollHandler(svc)
-	voteHandler := handler.NewVoteHandler(voteSvc)
 	authHandler := handler.NewAuthHandler(authSvc, "https://example.com/redirect", "", http.SameSiteLaxMode)
-	router := handler.NewHandler(pollHandler, voteHandler, authHandler, []string{"*"})
+	userHandler := handler.NewUserHandler(userSvc)
+	router := handler.NewHandler(nil, nil, authHandler, userHandler, []string{"*"})
 
 	server := httptest.NewServer(router)
 
@@ -65,7 +61,7 @@ func setupAuthTestApp(t *testing.T) *TestApp {
 		DB:          db,
 		Server:      server,
 		Client:      server.Client(),
-		SummarySvc:  summarySvc,
+		SummarySvc:  nil,
 		DBContainer: dbContainer,
 	}
 }

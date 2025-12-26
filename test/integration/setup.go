@@ -7,8 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -71,4 +75,26 @@ func applyMigrations(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+func createUserAndToken(t *testing.T, db *sql.DB) string {
+	t.Helper()
+
+	userID := uuid.New()
+	email := fmt.Sprintf("user-%s@example.com", userID)
+	name := fmt.Sprintf("User %s", userID)
+	_, err := db.Exec("INSERT INTO users (id, email, name) VALUES ($1, $2, $3)", userID, email, name)
+	require.NoError(t, err)
+
+	claims := jwt.MapClaims{
+		"sub":   userID.String(),
+		"email": email,
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+		"iat":   time.Now().Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString([]byte("test-secret"))
+	require.NoError(t, err)
+	return signedToken
 }
