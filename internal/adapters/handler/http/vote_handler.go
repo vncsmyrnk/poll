@@ -45,9 +45,16 @@ func (h *VoteHandler) VoteOnPoll(w http.ResponseWriter, r *http.Request) {
 		ip = r.RemoteAddr
 	}
 
+	userID, ok := r.Context().Value(UserIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized: missing user context", http.StatusUnauthorized)
+		return
+	}
+
 	input := ports.VoteInput{
 		PollID:   pollID,
 		OptionID: req.OptionID,
+		UserID:   userID,
 		VoterIP:  ip,
 	}
 

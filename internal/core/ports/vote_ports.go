@@ -9,12 +9,13 @@ import (
 
 type VoteRepository interface {
 	SaveVote(ctx context.Context, vote *domain.Vote) error
-	HasVoted(ctx context.Context, pollID uuid.UUID, voterIP string) (bool, error)
+	HasVoted(ctx context.Context, pollID uuid.UUID, userID uuid.UUID) (bool, error)
 }
 
 type VoteInput struct {
 	PollID   uuid.UUID
 	OptionID uuid.UUID
+	UserID   uuid.UUID
 	VoterIP  string
 }
 

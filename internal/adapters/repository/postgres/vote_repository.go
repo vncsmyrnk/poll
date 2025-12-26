@@ -22,20 +22,20 @@ func NewVoteRepository(db *sql.DB) ports.VoteRepository {
 
 func (r *voteRepository) SaveVote(ctx context.Context, vote *domain.Vote) error {
 	query := `
-		INSERT INTO votes (id, poll_id, option_id, voter_ip)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO votes (id, poll_id, option_id, user_id, voter_ip)
+		VALUES ($1, $2, $3, $4, $5)
 	`
-	_, err := r.db.ExecContext(ctx, query, vote.ID, vote.PollID, vote.OptionID, vote.VoterIP)
+	_, err := r.db.ExecContext(ctx, query, vote.ID, vote.PollID, vote.OptionID, vote.UserID, vote.VoterIP)
 	if err != nil {
 		return fmt.Errorf("failed to save vote: %w", err)
 	}
 	return nil
 }
 
-func (r *voteRepository) HasVoted(ctx context.Context, pollID uuid.UUID, voterIP string) (bool, error) {
-	query := `SELECT 1 FROM votes WHERE poll_id = $1 AND voter_ip = $2 LIMIT 1`
+func (r *voteRepository) HasVoted(ctx context.Context, pollID uuid.UUID, userID uuid.UUID) (bool, error) {
+	query := `SELECT 1 FROM votes WHERE poll_id = $1 AND user_id = $2 LIMIT 1`
 	var exists int
-	err := r.db.QueryRowContext(ctx, query, pollID, voterIP).Scan(&exists)
+	err := r.db.QueryRowContext(ctx, query, pollID, userID).Scan(&exists)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return false, nil

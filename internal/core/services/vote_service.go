@@ -41,7 +41,7 @@ func (s *voteService) Vote(ctx context.Context, input ports.VoteInput) error {
 	}
 
 	// 3. Check if already voted
-	hasVoted, err := s.voteRepo.HasVoted(ctx, input.PollID, input.VoterIP)
+	hasVoted, err := s.voteRepo.HasVoted(ctx, input.PollID, input.UserID)
 	if err != nil {
 		return err
 	}
@@ -54,6 +54,7 @@ func (s *voteService) Vote(ctx context.Context, input ports.VoteInput) error {
 		ID:        uuid.New(),
 		PollID:    input.PollID,
 		OptionID:  input.OptionID,
+		UserID:    input.UserID,
 		VoterIP:   input.VoterIP,
 		CreatedAt: time.Now(),
 	}
