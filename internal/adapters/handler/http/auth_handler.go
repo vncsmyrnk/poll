@@ -72,6 +72,19 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"status":"ok"}`))
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("refresh_token")
+	if err == nil && cookie.Value != "" {
+		_ = h.authService.Logout(r.Context(), cookie.Value)
+	}
+
+	h.expireCookies(w)
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"status":"ok"}`))
 }
 
@@ -82,7 +95,7 @@ func (h *AuthHandler) setAccessTokenCookie(w http.ResponseWriter, token string) 
 		Path:     "/",
 		Domain:   h.cookieDomain,
 		HttpOnly: true,
-		Secure:   true, // Should be true in production
+		Secure:   true,
 		SameSite: h.cookieSameSite,
 		MaxAge:   15 * 60, // 15 minutes
 	})

@@ -157,3 +157,64 @@ func TestAuthFlow_Invalid(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
+
+func TestLogout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	app := setupAuthTestApp(t)
+	defer app.Teardown(t)
+
+	// 1. Login
+	form := url.Values{}
+	form.Add("credential", "valid_token")
+	app.Client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	resp, err := app.Client.PostForm(app.Server.URL+"/oauth/callback", form)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var refreshToken string
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "refresh_token" {
+			refreshToken = cookie.Value
+		}
+	}
+	require.NotEmpty(t, refreshToken)
+
+	// 2. Logout
+	req, err := http.NewRequest("POST", app.Server.URL+"/auth/logout", nil)
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: refreshToken})
+
+	resp, err = app.Client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Check cookies expired
+	accessExpired := false
+	refreshExpired := false
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "access_token" && cookie.MaxAge < 0 {
+			accessExpired = true
+		}
+		if cookie.Name == "refresh_token" && cookie.MaxAge < 0 {
+			refreshExpired = true
+		}
+	}
+	assert.True(t, accessExpired, "access_token should be expired")
+	assert.True(t, refreshExpired, "refresh_token should be expired")
+
+	// 3. Try to Refresh (Should Fail)
+	req, err = http.NewRequest("POST", app.Server.URL+"/oauth/refresh", nil)
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: refreshToken})
+
+	resp, err = app.Client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}

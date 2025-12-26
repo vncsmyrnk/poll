@@ -87,6 +87,20 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshToken strin
 	return accessToken, refreshToken, nil
 }
 
+func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
+	tokenHash := s.hashToken(refreshToken)
+
+	rtEntity, err := s.authRepo.GetRefreshTokenByHash(ctx, tokenHash)
+	if err != nil {
+		return fmt.Errorf("failed to get refresh token: %w", err)
+	}
+	if rtEntity == nil {
+		return nil
+	}
+
+	return s.authRepo.RevokeRefreshToken(ctx, rtEntity.ID.String())
+}
+
 func (s *AuthService) login(ctx context.Context, email, name string) (string, string, error) {
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {

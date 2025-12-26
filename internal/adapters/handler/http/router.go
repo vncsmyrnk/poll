@@ -28,5 +28,9 @@ func NewHandler(pollHandler *PollHandler, voteHandler *VoteHandler, authHandler 
 		r.Post("/refresh", authHandler.Refresh)
 	})
 
+	r.Route("/auth", func(r chi.Router) {
+		r.Post("/logout", authHandler.Logout)
+	})
+
 	return r
 }

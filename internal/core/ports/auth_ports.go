@@ -24,4 +24,5 @@ type AuthRepository interface {
 type AuthService interface {
 	LoginWithGoogle(ctx context.Context, googleToken string) (string, string, error)
 	RefreshAccessToken(ctx context.Context, refreshToken string) (string, string, error)
+	Logout(ctx context.Context, refreshToken string) error
 }
