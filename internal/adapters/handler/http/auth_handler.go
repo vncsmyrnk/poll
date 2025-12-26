@@ -7,14 +7,18 @@ import (
 )
 
 type AuthHandler struct {
-	authService ports.AuthService
-	redirectURL string
+	authService    ports.AuthService
+	redirectURL    string
+	cookieDomain   string
+	cookieSameSite http.SameSite
 }
 
-func NewAuthHandler(authService ports.AuthService, redirectURL string) *AuthHandler {
+func NewAuthHandler(authService ports.AuthService, redirectURL string, cookieDomain string, cookieSameSite http.SameSite) *AuthHandler {
 	return &AuthHandler{
-		authService: authService,
-		redirectURL: redirectURL,
+		authService:    authService,
+		redirectURL:    redirectURL,
+		cookieDomain:   cookieDomain,
+		cookieSameSite: cookieSameSite,
 	}
 }
 
@@ -76,9 +80,10 @@ func (h *AuthHandler) setAccessTokenCookie(w http.ResponseWriter, token string) 
 		Name:     "access_token",
 		Value:    token,
 		Path:     "/",
+		Domain:   h.cookieDomain,
 		HttpOnly: true,
 		Secure:   true, // Should be true in production
-		SameSite: http.SameSiteLaxMode,
+		SameSite: h.cookieSameSite,
 		MaxAge:   15 * 60, // 15 minutes
 	})
 }
@@ -88,14 +93,15 @@ func (h *AuthHandler) setRefreshTokenCookie(w http.ResponseWriter, token string)
 		Name:     "refresh_token",
 		Value:    token,
 		Path:     "/",
+		Domain:   h.cookieDomain,
 		HttpOnly: true,
 		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: h.cookieSameSite,
 		MaxAge:   7 * 24 * 60 * 60, // 7 days
 	})
 }
 
 func (h *AuthHandler) expireCookies(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: "access_token", MaxAge: -1, Path: "/"})
-	http.SetCookie(w, &http.Cookie{Name: "refresh_token", MaxAge: -1, Path: "/"})
+	http.SetCookie(w, &http.Cookie{Name: "access_token", MaxAge: -1, Path: "/", Domain: h.cookieDomain})
+	http.SetCookie(w, &http.Cookie{Name: "refresh_token", MaxAge: -1, Path: "/", Domain: h.cookieDomain})
 }

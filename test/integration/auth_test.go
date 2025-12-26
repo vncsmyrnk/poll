@@ -56,7 +56,7 @@ func setupAuthTestApp(t *testing.T) *TestApp {
 
 	pollHandler := handler.NewPollHandler(svc)
 	voteHandler := handler.NewVoteHandler(voteSvc)
-	authHandler := handler.NewAuthHandler(authSvc, "https://example.com/redirect")
+	authHandler := handler.NewAuthHandler(authSvc, "https://example.com/redirect", "", http.SameSiteLaxMode)
 	router := handler.NewHandler(pollHandler, voteHandler, authHandler, []string{"*"})
 
 	server := httptest.NewServer(router)

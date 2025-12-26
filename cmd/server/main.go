@@ -53,12 +53,25 @@ func main() {
 
 	redirectURL := os.Getenv("AUTH_REDIRECT_URL")
 	if redirectURL == "" {
-		redirectURL = "https://poll.vncsmyrnk.dev"
+		log.Println("AUTH_REDIRECT_URL was not set")
+	}
+
+	cookieDomain := os.Getenv("COOKIE_DOMAIN") // e.g., ".vncsmyrnk.dev"
+	if cookieDomain == "" {
+		log.Println("COOKIE_DOMAIN was not set")
+	}
+
+	sameSiteMode := stdhttp.SameSiteLaxMode
+	sameSiteEnv := os.Getenv("COOKIE_SAMESITE")
+	if strings.EqualFold(sameSiteEnv, "strict") {
+		sameSiteMode = stdhttp.SameSiteStrictMode
+	} else if strings.EqualFold(sameSiteEnv, "none") {
+		sameSiteMode = stdhttp.SameSiteNoneMode
 	}
 
 	pollHandler := http.NewPollHandler(pollService)
 	voteHandler := http.NewVoteHandler(voteService)
-	authHandler := http.NewAuthHandler(authService, redirectURL)
+	authHandler := http.NewAuthHandler(authService, redirectURL, cookieDomain, sameSiteMode)
 
 	corsOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	var allowedOrigins []string
