@@ -38,12 +38,17 @@ func (s *voteService) Vote(ctx context.Context, input ports.VoteInput) error {
 		return domain.ErrInvalidOption
 	}
 
-	hasVoted, err := s.voteRepo.HasVoted(ctx, input.PollID, input.UserID)
+	hasVotedOnOption, err := s.voteRepo.HasVotedOnOption(ctx, input.OptionID, input.UserID)
 	if err != nil {
 		return err
 	}
-	if hasVoted {
+	if hasVotedOnOption {
 		return domain.ErrAlreadyVoted
+	}
+
+	err = s.unvote(ctx, input.PollID, input.UserID)
+	if err != nil && err != domain.ErrUserNotVoted {
+		return err
 	}
 
 	vote := &domain.Vote{
@@ -58,7 +63,7 @@ func (s *voteService) Vote(ctx context.Context, input ports.VoteInput) error {
 	return s.voteRepo.SaveVote(ctx, vote)
 }
 
-func (s *voteService) Unvote(ctx context.Context, pollID, userID uuid.UUID) error {
+func (s *voteService) unvote(ctx context.Context, pollID, userID uuid.UUID) error {
 	hasVoted, err := s.voteRepo.HasVoted(ctx, pollID, userID)
 	if err != nil {
 		return err

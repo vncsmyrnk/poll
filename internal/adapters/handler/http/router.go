@@ -24,7 +24,6 @@ func NewHandler(pollHandler *PollHandler, voteHandler *VoteHandler, authHandler 
 			r.Route("/{id}/votes", func(r chi.Router) {
 				r.Use(AuthMiddleware)
 				r.Post("/", voteHandler.VoteOnPoll)
-				r.Delete("/", voteHandler.Unvote)
 			})
 		})
 	})

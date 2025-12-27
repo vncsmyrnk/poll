@@ -77,29 +77,3 @@ func (h *VoteHandler) VoteOnPoll(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusCreated)
 }
-
-func (h *VoteHandler) Unvote(w http.ResponseWriter, r *http.Request) {
-	pollIDStr := chi.URLParam(r, "id")
-	pollID, err := uuid.Parse(pollIDStr)
-	if err != nil {
-		http.Error(w, "invalid poll id", http.StatusBadRequest)
-		return
-	}
-
-	userID, ok := r.Context().Value(UserIDKey).(uuid.UUID)
-	if !ok {
-		http.Error(w, "Unauthorized: missing user context", http.StatusUnauthorized)
-		return
-	}
-
-	if err := h.service.Unvote(r.Context(), pollID, userID); err != nil {
-		if errors.Is(err, domain.ErrUserNotVoted) {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusCreated)
-}

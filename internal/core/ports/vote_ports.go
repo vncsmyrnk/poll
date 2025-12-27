@@ -11,6 +11,7 @@ type VoteRepository interface {
 	SaveVote(ctx context.Context, vote *domain.Vote) error
 	DeleteVote(ctx context.Context, pollID, userID uuid.UUID) error
 	HasVoted(ctx context.Context, pollID, userID uuid.UUID) (bool, error)
+	HasVotedOnOption(ctx context.Context, optionID, userID uuid.UUID) (bool, error)
 }
 
 type VoteInput struct {
@@ -22,5 +23,4 @@ type VoteInput struct {
 
 type VoteService interface {
 	Vote(ctx context.Context, input VoteInput) error
-	Unvote(ctx context.Context, pollID, userID uuid.UUID) error
 }

@@ -408,7 +408,7 @@ func TestListPollsSorted(t *testing.T) {
 	assert.Equal(t, "Poll A", list[2].Title) // 0 votes
 }
 
-func TestVoteDeletion(t *testing.T) {
+func TestVoteSwitching(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -418,8 +418,8 @@ func TestVoteDeletion(t *testing.T) {
 
 	// 1. Create Poll
 	createPayload := map[string]interface{}{
-		"title":       "Delete Vote Test",
-		"description": "Testing deletion",
+		"title":       "Vote Switch Test",
+		"description": "Testing vote switching",
 		"options":     []string{"Opt A", "Opt B"},
 	}
 	body, _ := json.Marshal(createPayload)
@@ -429,11 +429,11 @@ func TestVoteDeletion(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&poll)
 	resp.Body.Close()
 
-	// 2. Create User and Vote
+	// 2. Vote for Option A
 	token := app.createUserAndToken(t)
-	voteBody, _ := json.Marshal(map[string]interface{}{"option_id": poll.Options[0].ID})
+	voteBodyA, _ := json.Marshal(map[string]interface{}{"option_id": poll.Options[0].ID})
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), bytes.NewReader(voteBody))
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), bytes.NewReader(voteBodyA))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "access_token", Value: token})
@@ -441,34 +441,39 @@ func TestVoteDeletion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	// 3. Delete Vote (Success)
-	req, err = http.NewRequest("DELETE", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), nil)
+	// Verify Vote for A exists
+	var countA int
+	err = app.DB.QueryRow("SELECT COUNT(*) FROM votes WHERE poll_id=$1 AND option_id=$2 AND deleted_at IS NULL", poll.ID, poll.Options[0].ID).Scan(&countA)
 	require.NoError(t, err)
+	assert.Equal(t, 1, countA)
+
+	// 3. Vote for Option A AGAIN (Should fail - same option)
+	req, err = http.NewRequest("POST", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), bytes.NewReader(voteBodyA))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "access_token", Value: token})
 	resp, err = app.Client.Do(req)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusCreated, resp.StatusCode) // Handler returns 201 on success
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
 
-	// Verify DB state (deleted_at set)
-	var deletedAt sql.NullTime
-	var status string
-	err = app.DB.QueryRow("SELECT deleted_at, status FROM votes WHERE poll_id = $1", poll.ID).Scan(&deletedAt, &status)
+	// 4. Vote for Option B (Should succeed and switch vote)
+	voteBodyB, _ := json.Marshal(map[string]interface{}{"option_id": poll.Options[1].ID})
+	req, err = http.NewRequest("POST", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), bytes.NewReader(voteBodyB))
 	require.NoError(t, err)
-	assert.True(t, deletedAt.Valid, "deleted_at should be valid")
-	assert.Equal(t, "pending", status)
-
-	// 4. Delete Vote Again (Not Found / Idempotent?)
-	req, err = http.NewRequest("DELETE", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), nil)
-	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "access_token", Value: token})
 	resp, err = app.Client.Do(req)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	// 5. Delete Without Auth
-	req, err = http.NewRequest("DELETE", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), nil)
+	// Verify Vote for A is gone (soft deleted)
+	err = app.DB.QueryRow("SELECT COUNT(*) FROM votes WHERE poll_id=$1 AND option_id=$2 AND deleted_at IS NULL", poll.ID, poll.Options[0].ID).Scan(&countA)
 	require.NoError(t, err)
-	resp, err = app.Client.Do(req)
+	assert.Equal(t, 0, countA)
+
+	// Verify Vote for B exists
+	var countB int
+	err = app.DB.QueryRow("SELECT COUNT(*) FROM votes WHERE poll_id=$1 AND option_id=$2 AND deleted_at IS NULL", poll.ID, poll.Options[1].ID).Scan(&countB)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	assert.Equal(t, 1, countB)
 }

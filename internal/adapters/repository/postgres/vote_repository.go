@@ -55,3 +55,16 @@ func (r *voteRepository) HasVoted(ctx context.Context, pollID uuid.UUID, userID 
 	}
 	return true, nil
 }
+
+func (r *voteRepository) HasVotedOnOption(ctx context.Context, optionID uuid.UUID, userID uuid.UUID) (bool, error) {
+	query := `SELECT 1 FROM votes WHERE option_id = $1 AND user_id = $2 AND deleted_at IS NULL LIMIT 1`
+	var exists int
+	err := r.db.QueryRowContext(ctx, query, optionID, userID).Scan(&exists)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check existing vote: %w", err)
+	}
+	return true, nil
+}
