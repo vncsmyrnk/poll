@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/poll/api/internal/core/ports"
 )
 
@@ -21,22 +22,22 @@ func NewSummaryService(pollRepo ports.PollRepository, pollResultRepo ports.PollR
 }
 
 func (s *summaryService) SummarizeAllVotes(ctx context.Context) error {
-	polls, err := s.pollRepo.GetAll(ctx)
+	pollIDs, err := s.pollResultRepo.GetPollsWithUnprocessedVotes(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to fetch all polls: %w", err)
+		return fmt.Errorf("failed to fetch polls with unprocessed votes: %w", err)
 	}
 
 	var wg sync.WaitGroup
-	errChan := make(chan error, len(polls))
+	errChan := make(chan error, len(pollIDs))
 
-	for _, poll := range polls {
+	for _, pID := range pollIDs {
 		wg.Add(1)
-		go func(pID [16]byte) { // passing ID by value (uuid.UUID is [16]byte) to avoid closure issues
+		go func(id uuid.UUID) {
 			defer wg.Done()
-			if err := s.pollResultRepo.SummarizeVotes(ctx, pID); err != nil {
-				errChan <- fmt.Errorf("failed to summarize poll %s: %w", pID, err)
+			if err := s.pollResultRepo.ProcessVotes(ctx, id); err != nil {
+				errChan <- fmt.Errorf("failed to summarize poll %s: %w", id, err)
 			}
-		}(poll.ID)
+		}(pID)
 	}
 
 	wg.Wait()

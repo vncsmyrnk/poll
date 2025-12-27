@@ -8,7 +8,8 @@ import (
 )
 
 type PollResultRepository interface {
-	SummarizeVotes(ctx context.Context, pollID uuid.UUID) error
+	ProcessVotes(ctx context.Context, pollID uuid.UUID) error
+	GetPollsWithUnprocessedVotes(ctx context.Context) ([]uuid.UUID, error)
 	GetPollOptionStats(ctx context.Context, pollID uuid.UUID) (map[uuid.UUID]domain.PollOptionStats, error)
 }
 

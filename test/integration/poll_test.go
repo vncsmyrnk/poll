@@ -140,6 +140,12 @@ func TestVoteSummarization(t *testing.T) {
 	err = app.SummarySvc.SummarizeAllVotes(context.Background())
 	require.NoError(t, err)
 
+	// Verify votes are marked as 'valid' after summarization
+	var validCount int
+	err = app.DB.QueryRow("SELECT COUNT(*) FROM votes WHERE poll_id = $1 AND status = 'valid'", poll.ID).Scan(&validCount)
+	require.NoError(t, err)
+	assert.Equal(t, 3, validCount, "All 3 votes should be marked as valid")
+
 	// 4. Check API Results
 	// Verify Poll exists (standard endpoint)
 	resp, err = app.Client.Get(fmt.Sprintf("%s/api/polls/%s", app.Server.URL, poll.ID))
@@ -147,7 +153,7 @@ func TestVoteSummarization(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 
-	// Verify Count (new endpoint)
+	// Verify Count
 	// We need to authenticate as a user who has voted (e.g., u1)
 	claims := jwt.MapClaims{
 		"sub":   u1.String(),
@@ -179,6 +185,59 @@ func TestVoteSummarization(t *testing.T) {
 	s2 := stats[opt2.String()]
 	assert.Equal(t, int64(1), s2.VoteCount)
 	assert.InDelta(t, 33.33, s2.Percentage, 1.0)
+
+	// 5. Test that deleted votes are marked as 'invalid' and decremented
+	// Soft-delete one vote from opt1 (u1's vote)
+	_, err = app.DB.Exec("UPDATE votes SET deleted_at = NOW() WHERE poll_id = $1 AND user_id = $2", poll.ID, u1)
+	require.NoError(t, err)
+
+	// Run summarization again
+	err = app.SummarySvc.SummarizeAllVotes(context.Background())
+	require.NoError(t, err)
+
+	// Verify the deleted vote is marked as 'invalid'
+	var deletedVoteStatus string
+	err = app.DB.QueryRow("SELECT status FROM votes WHERE poll_id = $1 AND user_id = $2", poll.ID, u1).Scan(&deletedVoteStatus)
+	require.NoError(t, err)
+	assert.Equal(t, "invalid", deletedVoteStatus, "Deleted vote should be marked as invalid")
+
+	// Verify remaining valid votes
+	err = app.DB.QueryRow("SELECT COUNT(*) FROM votes WHERE poll_id = $1 AND status = 'valid'", poll.ID).Scan(&validCount)
+	require.NoError(t, err)
+	assert.Equal(t, 2, validCount, "Only 2 votes should remain valid")
+
+	// Verify updated counts via API
+	req, err = http.NewRequest("GET", fmt.Sprintf("%s/api/polls/%s/count", app.Server.URL, poll.ID), nil)
+	require.NoError(t, err)
+	// Use u2's token since u1's vote is now deleted
+	claims = jwt.MapClaims{
+		"sub":   u2.String(),
+		"email": "u2@ex.com",
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+		"iat":   time.Now().Unix(),
+	}
+	token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err = token.SignedString([]byte("test-secret"))
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: signedToken})
+
+	resp, err = app.Client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	err = json.NewDecoder(resp.Body).Decode(&stats)
+	require.NoError(t, err)
+	resp.Body.Close()
+
+	// Opt1 should now have 1 vote (was 2, minus 1 deleted)
+	s1 = stats[opt1.String()]
+	assert.Equal(t, int64(1), s1.VoteCount, "Opt1 should have 1 vote after deletion")
+	assert.InDelta(t, 50.0, s1.Percentage, 1.0)
+
+	// Opt2 should still have 1 vote
+	s2 = stats[opt2.String()]
+	assert.Equal(t, int64(1), s2.VoteCount, "Opt2 should still have 1 vote")
+	assert.InDelta(t, 50.0, s2.Percentage, 1.0)
 }
 
 // TestListPolls tests pagination and fuzzy search
