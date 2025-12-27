@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,11 +14,87 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	handler "github.com/poll/api/internal/adapters/handler/http"
+	repo "github.com/poll/api/internal/adapters/repository/postgres"
+	"github.com/poll/api/internal/core/ports"
+	"github.com/poll/api/internal/core/services"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+// MockVerifier for testing
+type MockVerifier struct {
+	email string
+	name  string
+}
+
+func (v *MockVerifier) Verify(ctx context.Context, token string, clientID string) (*ports.TokenPayload, error) {
+	if token == "valid_token" {
+		return &ports.TokenPayload{Email: v.email, Name: v.name}, nil
+	}
+	return nil, assert.AnError
+}
+
+type TestApp struct {
+	DB          *sql.DB
+	Server      *httptest.Server
+	Client      *http.Client
+	SummarySvc  ports.SummaryService
+	DBContainer testcontainers.Container
+}
+
+func setupTestApp(t *testing.T) *TestApp {
+	os.Setenv("JWT_SECRET", "test-secret")
+	ctx := context.Background()
+	dbContainer, dbURL, err := setupPostgresContainer(ctx)
+	require.NoError(t, err)
+
+	db, err := sql.Open("postgres", dbURL)
+	require.NoError(t, err)
+
+	err = applyMigrations(db)
+	require.NoError(t, err)
+
+	pollRepo := repo.NewPollRepository(db)
+	voteRepo := repo.NewVoteRepository(db)
+	resultRepo := repo.NewPollResultRepository(db)
+	userRepo := repo.NewUserRepository(db)
+	authRepo := repo.NewAuthRepository(db)
+	mockVerifier := &MockVerifier{email: "test@example.com", name: "Test user"}
+
+	svc := services.NewPollService(pollRepo, resultRepo, voteRepo)
+	voteSvc := services.NewVoteService(pollRepo, voteRepo)
+	userSvc := services.NewUserService(userRepo)
+	authSvc := services.NewAuthService(userRepo, authRepo, mockVerifier)
+	summarySvc := services.NewSummaryService(pollRepo, resultRepo)
+
+	pollHandler := handler.NewPollHandler(svc)
+	voteHandler := handler.NewVoteHandler(voteSvc)
+	userhandler := handler.NewUserHandler(userSvc)
+	authHandler := handler.NewAuthHandler(authSvc, "https://example.com/redirect", "", http.SameSiteLaxMode)
+	router := handler.NewHandler(pollHandler, voteHandler, authHandler, userhandler, []string{"*"})
+
+	server := httptest.NewServer(router)
+
+	return &TestApp{
+		DB:          db,
+		Server:      server,
+		Client:      server.Client(),
+		SummarySvc:  summarySvc,
+		DBContainer: dbContainer,
+	}
+}
+
+func (app *TestApp) Teardown(t *testing.T) {
+	app.Server.Close()
+	app.DB.Close()
+	if err := app.DBContainer.Terminate(context.Background()); err != nil {
+		t.Logf("failed to terminate container: %v", err)
+	}
+}
 
 func setupPostgresContainer(ctx context.Context) (testcontainers.Container, string, error) {
 	dbName := "testdb"

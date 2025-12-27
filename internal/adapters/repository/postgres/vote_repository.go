@@ -68,3 +68,23 @@ func (r *voteRepository) HasVotedOnOption(ctx context.Context, optionID uuid.UUI
 	}
 	return true, nil
 }
+
+func (r *voteRepository) GetVote(ctx context.Context, pollID, userID uuid.UUID) (*domain.Vote, error) {
+	query := `
+		SELECT id, poll_id, option_id, user_id, voter_ip, created_at
+		FROM votes
+		WHERE poll_id = $1 AND user_id = $2 AND deleted_at IS NULL
+	`
+	var vote domain.Vote
+	err := r.db.QueryRowContext(ctx, query, pollID, userID).Scan(
+		&vote.ID, &vote.PollID, &vote.OptionID, &vote.UserID, &vote.VoterIP, &vote.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrUserNotVoted
+		}
+		return nil, fmt.Errorf("failed to get vote: %w", err)
+	}
+
+	return &vote, nil
+}

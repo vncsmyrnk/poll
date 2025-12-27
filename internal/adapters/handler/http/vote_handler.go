@@ -77,3 +77,37 @@ func (h *VoteHandler) VoteOnPoll(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusCreated)
 }
+
+func (h *VoteHandler) GetMyVote(w http.ResponseWriter, r *http.Request) {
+	pollIDStr := chi.URLParam(r, "id")
+	pollID, err := uuid.Parse(pollIDStr)
+	if err != nil {
+		http.Error(w, "invalid poll id", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := r.Context().Value(UserIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized: missing user context", http.StatusUnauthorized)
+		return
+	}
+
+	vote, err := h.service.GetUserVote(r.Context(), pollID, userID)
+	if err != nil {
+		if errors.Is(err, domain.ErrUserNotVoted) {
+			http.Error(w, "vote not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]uuid.UUID{
+		"option_id": vote.OptionID,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+	}
+}

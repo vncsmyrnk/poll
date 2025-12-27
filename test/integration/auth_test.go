@@ -1,77 +1,21 @@
 package integration
 
 import (
-	"context"
-	"database/sql"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	handler "github.com/poll/api/internal/adapters/handler/http"
-	repo "github.com/poll/api/internal/adapters/repository/postgres"
-	"github.com/poll/api/internal/core/ports"
-	"github.com/poll/api/internal/core/services"
 )
-
-// MockVerifier for testing
-type MockVerifier struct {
-	email string
-	name  string
-}
-
-func (v *MockVerifier) Verify(ctx context.Context, token string, clientID string) (*ports.TokenPayload, error) {
-	if token == "valid_token" {
-		return &ports.TokenPayload{Email: v.email, Name: v.name}, nil
-	}
-	return nil, assert.AnError
-}
-
-func setupAuthTestApp(t *testing.T) *TestApp {
-	os.Setenv("JWT_SECRET", "test-secret")
-	ctx := context.Background()
-	dbContainer, dbURL, err := setupPostgresContainer(ctx)
-	require.NoError(t, err)
-
-	db, err := sql.Open("postgres", dbURL)
-	require.NoError(t, err)
-
-	err = applyMigrations(db)
-	require.NoError(t, err)
-
-	authRepo := repo.NewAuthRepository(db)
-	userRepo := repo.NewUserRepository(db)
-
-	mockVerifier := &MockVerifier{email: "test@example.com", name: "Test user"}
-	authSvc := services.NewAuthService(userRepo, authRepo, mockVerifier)
-	userSvc := services.NewUserService(userRepo)
-
-	authHandler := handler.NewAuthHandler(authSvc, "https://example.com/redirect", "", http.SameSiteLaxMode)
-	userHandler := handler.NewUserHandler(userSvc)
-	router := handler.NewHandler(nil, nil, authHandler, userHandler, []string{"*"})
-
-	server := httptest.NewServer(router)
-
-	return &TestApp{
-		DB:          db,
-		Server:      server,
-		Client:      server.Client(),
-		SummarySvc:  nil,
-		DBContainer: dbContainer,
-	}
-}
 
 func TestAuthFlow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
 
-	app := setupAuthTestApp(t)
+	app := setupTestApp(t)
 	defer app.Teardown(t)
 
 	// 1. Callback with Valid Credential
@@ -137,7 +81,7 @@ func TestAuthFlow_Invalid(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	app := setupAuthTestApp(t)
+	app := setupTestApp(t)
 	defer app.Teardown(t)
 
 	// Invalid Credential
@@ -163,7 +107,7 @@ func TestLogout(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	app := setupAuthTestApp(t)
+	app := setupTestApp(t)
 	defer app.Teardown(t)
 
 	// 1. Login

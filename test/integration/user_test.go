@@ -2,56 +2,21 @@ package integration
 
 import (
 	"bytes"
-	"context"
-	"database/sql"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/golang-jwt/jwt/v5"
-	handler "github.com/poll/api/internal/adapters/handler/http"
-	repo "github.com/poll/api/internal/adapters/repository/postgres"
-	"github.com/poll/api/internal/core/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func setupUserTestApp(t *testing.T) *TestApp {
-	os.Setenv("JWT_SECRET", "test-secret")
-	ctx := context.Background()
-	dbContainer, dbURL, err := setupPostgresContainer(ctx)
-	require.NoError(t, err)
-
-	db, err := sql.Open("postgres", dbURL)
-	require.NoError(t, err)
-
-	err = applyMigrations(db)
-	require.NoError(t, err)
-
-	userRepo := repo.NewUserRepository(db)
-	userSvc := services.NewUserService(userRepo)
-	userHandler := handler.NewUserHandler(userSvc)
-	router := handler.NewHandler(nil, nil, nil, userHandler, []string{"*"})
-
-	server := httptest.NewServer(router)
-
-	return &TestApp{
-		DB:          db,
-		Server:      server,
-		Client:      server.Client(),
-		SummarySvc:  nil,
-		DBContainer: dbContainer,
-	}
-}
 
 func TestGetMe(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
 
-	app := setupUserTestApp(t)
+	app := setupTestApp(t)
 	defer app.Teardown(t)
 
 	token := createUserAndToken(t, app.DB)
@@ -97,7 +62,7 @@ func TestGetMe_Unauthorized(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	app := setupUserTestApp(t)
+	app := setupTestApp(t)
 	defer app.Teardown(t)
 
 	// Call /api/me without token

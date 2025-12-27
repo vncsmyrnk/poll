@@ -75,3 +75,11 @@ func (s *voteService) unvote(ctx context.Context, pollID, userID uuid.UUID) erro
 
 	return s.voteRepo.DeleteVote(ctx, pollID, userID)
 }
+
+func (s *voteService) GetUserVote(ctx context.Context, pollID, userID uuid.UUID) (*domain.Vote, error) {
+	vote, err := s.voteRepo.GetVote(ctx, pollID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return vote, nil
+}

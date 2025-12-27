@@ -25,6 +25,7 @@ func NewHandler(pollHandler *PollHandler, voteHandler *VoteHandler, authHandler 
 				r.Use(AuthMiddleware)
 				r.Post("/", voteHandler.VoteOnPoll)
 			})
+			r.With(AuthMiddleware).Get("/{id}/my-vote", voteHandler.GetMyVote)
 		})
 	})
 

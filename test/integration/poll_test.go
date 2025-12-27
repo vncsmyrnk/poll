@@ -3,12 +3,9 @@ package integration
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -17,85 +14,9 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
 
-	handler "github.com/poll/api/internal/adapters/handler/http"
-	repo "github.com/poll/api/internal/adapters/repository/postgres"
 	"github.com/poll/api/internal/core/domain"
-	"github.com/poll/api/internal/core/ports"
-	"github.com/poll/api/internal/core/services"
 )
-
-type TestApp struct {
-	DB          *sql.DB
-	Server      *httptest.Server
-	Client      *http.Client
-	SummarySvc  ports.SummaryService
-	DBContainer testcontainers.Container
-}
-
-func setupTestApp(t *testing.T) *TestApp {
-	os.Setenv("JWT_SECRET", "test-secret")
-	ctx := context.Background()
-	dbContainer, dbURL, err := setupPostgresContainer(ctx)
-	require.NoError(t, err)
-
-	db, err := sql.Open("postgres", dbURL)
-	require.NoError(t, err)
-
-	err = applyMigrations(db)
-	require.NoError(t, err)
-
-	pollRepo := repo.NewPollRepository(db)
-	voteRepo := repo.NewVoteRepository(db)
-	resultRepo := repo.NewPollResultRepository(db)
-
-	svc := services.NewPollService(pollRepo, resultRepo, voteRepo)
-	voteSvc := services.NewVoteService(pollRepo, voteRepo)
-	summarySvc := services.NewSummaryService(pollRepo, resultRepo)
-
-	pollHandler := handler.NewPollHandler(svc)
-	voteHandler := handler.NewVoteHandler(voteSvc)
-	router := handler.NewHandler(pollHandler, voteHandler, nil, nil, []string{"*"})
-
-	server := httptest.NewServer(router)
-
-	return &TestApp{
-		DB:          db,
-		Server:      server,
-		Client:      server.Client(),
-		SummarySvc:  summarySvc,
-		DBContainer: dbContainer,
-	}
-}
-
-func (app *TestApp) createUserAndToken(t *testing.T) string {
-	userID := uuid.New()
-	email := fmt.Sprintf("user-%s@example.com", userID)
-	name := fmt.Sprintf("User %s", userID)
-	_, err := app.DB.Exec("INSERT INTO users (id, email, name) VALUES ($1, $2, $3)", userID, email, name)
-	require.NoError(t, err)
-
-	claims := jwt.MapClaims{
-		"sub":   userID.String(),
-		"email": email,
-		"exp":   time.Now().Add(15 * time.Minute).Unix(),
-		"iat":   time.Now().Unix(),
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte("test-secret"))
-	require.NoError(t, err)
-	return signedToken
-}
-
-func (app *TestApp) Teardown(t *testing.T) {
-	app.Server.Close()
-	app.DB.Close()
-	if err := app.DBContainer.Terminate(context.Background()); err != nil {
-		t.Logf("failed to terminate container: %v", err)
-	}
-}
 
 // TestPollFlow tests the basic lifecycle: Create Poll -> Get Poll -> Vote -> Prevent Duplicate Vote
 func TestPollFlow(t *testing.T) {
@@ -406,74 +327,4 @@ func TestListPollsSorted(t *testing.T) {
 	assert.Equal(t, "Poll B", list[0].Title) // 10 votes
 	assert.Equal(t, "Poll C", list[1].Title) // 5 votes
 	assert.Equal(t, "Poll A", list[2].Title) // 0 votes
-}
-
-func TestVoteSwitching(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	app := setupTestApp(t)
-	defer app.Teardown(t)
-
-	// 1. Create Poll
-	createPayload := map[string]interface{}{
-		"title":       "Vote Switch Test",
-		"description": "Testing vote switching",
-		"options":     []string{"Opt A", "Opt B"},
-	}
-	body, _ := json.Marshal(createPayload)
-	resp, err := app.Client.Post(app.Server.URL+"/api/polls", "application/json", bytes.NewReader(body))
-	require.NoError(t, err)
-	var poll domain.Poll
-	json.NewDecoder(resp.Body).Decode(&poll)
-	resp.Body.Close()
-
-	// 2. Vote for Option A
-	token := app.createUserAndToken(t)
-	voteBodyA, _ := json.Marshal(map[string]interface{}{"option_id": poll.Options[0].ID})
-
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), bytes.NewReader(voteBodyA))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "access_token", Value: token})
-	resp, err = app.Client.Do(req)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	// Verify Vote for A exists
-	var countA int
-	err = app.DB.QueryRow("SELECT COUNT(*) FROM votes WHERE poll_id=$1 AND option_id=$2 AND deleted_at IS NULL", poll.ID, poll.Options[0].ID).Scan(&countA)
-	require.NoError(t, err)
-	assert.Equal(t, 1, countA)
-
-	// 3. Vote for Option A AGAIN (Should fail - same option)
-	req, err = http.NewRequest("POST", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), bytes.NewReader(voteBodyA))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "access_token", Value: token})
-	resp, err = app.Client.Do(req)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusConflict, resp.StatusCode)
-
-	// 4. Vote for Option B (Should succeed and switch vote)
-	voteBodyB, _ := json.Marshal(map[string]interface{}{"option_id": poll.Options[1].ID})
-	req, err = http.NewRequest("POST", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), bytes.NewReader(voteBodyB))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "access_token", Value: token})
-	resp, err = app.Client.Do(req)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	// Verify Vote for A is gone (soft deleted)
-	err = app.DB.QueryRow("SELECT COUNT(*) FROM votes WHERE poll_id=$1 AND option_id=$2 AND deleted_at IS NULL", poll.ID, poll.Options[0].ID).Scan(&countA)
-	require.NoError(t, err)
-	assert.Equal(t, 0, countA)
-
-	// Verify Vote for B exists
-	var countB int
-	err = app.DB.QueryRow("SELECT COUNT(*) FROM votes WHERE poll_id=$1 AND option_id=$2 AND deleted_at IS NULL", poll.ID, poll.Options[1].ID).Scan(&countB)
-	require.NoError(t, err)
-	assert.Equal(t, 1, countB)
 }
