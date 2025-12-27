@@ -65,7 +65,7 @@ func (s *voteService) Unvote(ctx context.Context, pollID, userID uuid.UUID) erro
 	}
 
 	if !hasVoted {
-		return domain.ErrDidNotVoted
+		return domain.ErrUserNotVoted
 	}
 
 	return s.voteRepo.DeleteVote(ctx, pollID, userID)

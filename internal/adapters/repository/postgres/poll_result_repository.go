@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"github.com/poll/api/internal/core/domain"
 	"github.com/poll/api/internal/core/ports"
 )
@@ -21,18 +20,14 @@ func NewPollResultRepository(db *sql.DB) ports.PollResultRepository {
 	}
 }
 
-func (r *pollResultRepository) GetStatsForPolls(ctx context.Context, pollIDs []uuid.UUID) (map[uuid.UUID]domain.PollOptionStats, error) {
-	if len(pollIDs) == 0 {
-		return nil, nil
-	}
-
+func (r *pollResultRepository) GetPollOptionStats(ctx context.Context, pollID uuid.UUID) (map[uuid.UUID]domain.PollOptionStats, error) {
 	query := `
 		SELECT poll_id, option_id, vote_count
 		FROM poll_results
-		WHERE poll_id = ANY($1)
+		WHERE poll_id = $1
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, pq.Array(pollIDs))
+	rows, err := r.db.QueryContext(ctx, query, pollID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch stats batch: %w", err)
 	}

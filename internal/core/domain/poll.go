@@ -16,12 +16,10 @@ type Poll struct {
 }
 
 type PollOption struct {
-	ID         uuid.UUID `json:"id"`
-	PollID     uuid.UUID `json:"poll_id"`
-	Text       string    `json:"text"`
-	VoteCount  int64     `json:"vote_count"`
-	Percentage float64   `json:"percentage"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID        uuid.UUID `json:"id"`
+	PollID    uuid.UUID `json:"poll_id"`
+	Text      string    `json:"text"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type PollOptionStats struct {

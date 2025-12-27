@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,12 +13,14 @@ import (
 type pollService struct {
 	pollRepo       ports.PollRepository
 	pollResultRepo ports.PollResultRepository
+	voteRepo       ports.VoteRepository
 }
 
-func NewPollService(pollRepo ports.PollRepository, pollResultRepo ports.PollResultRepository) ports.PollService {
+func NewPollService(pollRepo ports.PollRepository, pollResultRepo ports.PollResultRepository, voteRepo ports.VoteRepository) ports.PollService {
 	return &pollService{
 		pollRepo:       pollRepo,
 		pollResultRepo: pollResultRepo,
+		voteRepo:       voteRepo,
 	}
 }
 
@@ -76,42 +77,7 @@ func (s *pollService) GetPoll(ctx context.Context, id string) (*domain.Poll, err
 		return nil, err
 	}
 
-	if err := s.enrichPollsWithStats(ctx, []*domain.Poll{poll}); err != nil {
-		return nil, err
-	}
-
 	return poll, nil
-}
-
-func (s *pollService) enrichPollsWithStats(ctx context.Context, polls []*domain.Poll) error {
-	if len(polls) == 0 {
-		return nil
-	}
-
-	ids := make([]uuid.UUID, len(polls))
-	for i, p := range polls {
-		ids[i] = p.ID
-	}
-
-	statsMap, err := s.pollResultRepo.GetStatsForPolls(ctx, ids)
-	if err != nil {
-		return err
-	}
-
-	var wg sync.WaitGroup
-	for _, p := range polls {
-		wg.Go(func() {
-			for i := range p.Options {
-				if stat, ok := statsMap[p.Options[i].ID]; ok {
-					p.Options[i].VoteCount = stat.VoteCount
-					p.Options[i].Percentage = stat.Percentage
-				}
-			}
-		})
-	}
-	wg.Wait()
-
-	return nil
 }
 
 func (s *pollService) ListPolls(ctx context.Context, input ports.ListPollsInput) ([]*domain.Poll, error) {
@@ -142,9 +108,28 @@ func (s *pollService) ListPolls(ctx context.Context, input ports.ListPollsInput)
 		return nil, err
 	}
 
-	if err := s.enrichPollsWithStats(ctx, polls); err != nil {
+	return polls, nil
+}
+
+func (s *pollService) GetPollStats(ctx context.Context, id string, userID uuid.UUID) (map[uuid.UUID]domain.PollOptionStats, error) {
+	pollID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, domain.ErrInvalidPollID
+	}
+
+	_, err = s.pollRepo.GetByID(ctx, pollID)
+	if err != nil {
 		return nil, err
 	}
 
-	return polls, nil
+	hasVoted, err := s.voteRepo.HasVoted(ctx, pollID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !hasVoted {
+		return nil, domain.ErrUserNotVoted
+	}
+
+	return s.pollResultRepo.GetPollOptionStats(ctx, pollID)
 }

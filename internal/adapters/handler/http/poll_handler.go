@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/poll/api/internal/core/domain"
 	"github.com/poll/api/internal/core/ports"
 )
@@ -106,6 +107,44 @@ func (h *PollHandler) ListPolls(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(polls); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+func (h *PollHandler) GetPollStats(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, "missing poll id", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := r.Context().Value(UserIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized: missing user context", http.StatusUnauthorized)
+		return
+	}
+
+	stats, err := h.service.GetPollStats(r.Context(), id, userID)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidPollID) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, domain.ErrPollNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, domain.ErrUserNotVoted) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 	}
 }

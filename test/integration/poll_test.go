@@ -50,7 +50,7 @@ func setupTestApp(t *testing.T) *TestApp {
 	voteRepo := repo.NewVoteRepository(db)
 	resultRepo := repo.NewPollResultRepository(db)
 
-	svc := services.NewPollService(pollRepo, resultRepo)
+	svc := services.NewPollService(pollRepo, resultRepo, voteRepo)
 	voteSvc := services.NewVoteService(pollRepo, voteRepo)
 	summarySvc := services.NewSummaryService(pollRepo, resultRepo)
 
@@ -183,7 +183,7 @@ func TestVoteSummarization(t *testing.T) {
 
 	// 1. Create Poll
 	createPayload := map[string]interface{}{
-		"title":       "Stats Test Poll",
+		"title":       "Count Test Poll",
 		"description": "Testing aggregation",
 		"options":     []string{"Opt1", "Opt2", "Opt3"},
 	}
@@ -220,26 +220,44 @@ func TestVoteSummarization(t *testing.T) {
 	require.NoError(t, err)
 
 	// 4. Check API Results
+	// Verify Poll exists (standard endpoint)
 	resp, err = app.Client.Get(fmt.Sprintf("%s/api/polls/%s", app.Server.URL, poll.ID))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var statsPoll domain.Poll
-	json.NewDecoder(resp.Body).Decode(&statsPoll)
 	resp.Body.Close()
 
-	for _, o := range statsPoll.Options {
-		if o.ID == opt1 {
-			assert.Equal(t, int64(2), o.VoteCount)
-			assert.InDelta(t, 66.66, o.Percentage, 1.0)
-		} else if o.ID == opt2 {
-			assert.Equal(t, int64(1), o.VoteCount)
-			assert.InDelta(t, 33.33, o.Percentage, 1.0)
-		} else {
-			assert.Equal(t, int64(0), o.VoteCount)
-			assert.Equal(t, 0.0, o.Percentage)
-		}
+	// Verify Count (new endpoint)
+	// We need to authenticate as a user who has voted (e.g., u1)
+	claims := jwt.MapClaims{
+		"sub":   u1.String(),
+		"email": "u1@ex.com",
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+		"iat":   time.Now().Unix(),
 	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString([]byte("test-secret"))
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/polls/%s/count", app.Server.URL, poll.ID), nil)
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: signedToken})
+
+	resp, err = app.Client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var stats map[string]domain.PollOptionStats
+	err = json.NewDecoder(resp.Body).Decode(&stats)
+	require.NoError(t, err)
+	resp.Body.Close()
+
+	s1 := stats[opt1.String()]
+	assert.Equal(t, int64(2), s1.VoteCount)
+	assert.InDelta(t, 66.66, s1.Percentage, 1.0)
+
+	s2 := stats[opt2.String()]
+	assert.Equal(t, int64(1), s2.VoteCount)
+	assert.InDelta(t, 33.33, s2.Percentage, 1.0)
 }
 
 // TestListPolls tests pagination and fuzzy search

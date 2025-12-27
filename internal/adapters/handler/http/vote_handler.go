@@ -93,7 +93,7 @@ func (h *VoteHandler) Unvote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.Unvote(r.Context(), pollID, userID); err != nil {
-		if errors.Is(err, domain.ErrDidNotVoted) {
+		if errors.Is(err, domain.ErrUserNotVoted) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}

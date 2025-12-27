@@ -9,7 +9,7 @@ import (
 
 type PollResultRepository interface {
 	SummarizeVotes(ctx context.Context, pollID uuid.UUID) error
-	GetStatsForPolls(ctx context.Context, pollIDs []uuid.UUID) (map[uuid.UUID]domain.PollOptionStats, error)
+	GetPollOptionStats(ctx context.Context, pollID uuid.UUID) (map[uuid.UUID]domain.PollOptionStats, error)
 }
 
 type SummaryService interface {

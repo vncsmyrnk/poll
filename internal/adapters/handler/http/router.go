@@ -19,6 +19,7 @@ func NewHandler(pollHandler *PollHandler, voteHandler *VoteHandler, authHandler 
 			r.Get("/", pollHandler.ListPolls)
 			r.Post("/", pollHandler.CreatePoll)
 			r.Get("/{id}", pollHandler.GetPoll)
+			r.With(AuthMiddleware).Get("/{id}/count", pollHandler.GetPollStats)
 
 			r.Route("/{id}/votes", func(r chi.Router) {
 				r.Use(AuthMiddleware)

@@ -47,7 +47,7 @@ func main() {
 
 	verifier := google.NewVerifier()
 
-	pollService := services.NewPollService(pollRepo, resultRepo)
+	pollService := services.NewPollService(pollRepo, resultRepo, voteRepo)
 	voteService := services.NewVoteService(pollRepo, voteRepo)
 	authService := services.NewAuthService(userRepo, authRepo, verifier)
 	userService := services.NewUserService(userRepo)

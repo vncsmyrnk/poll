@@ -30,4 +30,5 @@ type PollService interface {
 	Create(ctx context.Context, input CreatePollInput) (*domain.Poll, error)
 	GetPoll(ctx context.Context, id string) (*domain.Poll, error)
 	ListPolls(ctx context.Context, input ListPollsInput) ([]*domain.Poll, error)
+	GetPollStats(ctx context.Context, pollID string, userID uuid.UUID) (map[uuid.UUID]domain.PollOptionStats, error)
 }
