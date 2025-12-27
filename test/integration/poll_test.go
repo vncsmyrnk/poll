@@ -155,6 +155,12 @@ func TestPollFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
+	// Verify Vote Status is Pending
+	var status string
+	err = app.DB.QueryRow("SELECT status FROM votes WHERE poll_id = $1", createdPoll.ID).Scan(&status)
+	require.NoError(t, err)
+	assert.Equal(t, "pending", status)
+
 	// Step 4: Duplicate Vote
 	req, err = http.NewRequest("POST", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, createdPoll.ID), bytes.NewReader(voteBody))
 	require.NoError(t, err)
@@ -382,4 +388,69 @@ func TestListPollsSorted(t *testing.T) {
 	assert.Equal(t, "Poll B", list[0].Title) // 10 votes
 	assert.Equal(t, "Poll C", list[1].Title) // 5 votes
 	assert.Equal(t, "Poll A", list[2].Title) // 0 votes
+}
+
+func TestVoteDeletion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	app := setupTestApp(t)
+	defer app.Teardown(t)
+
+	// 1. Create Poll
+	createPayload := map[string]interface{}{
+		"title":       "Delete Vote Test",
+		"description": "Testing deletion",
+		"options":     []string{"Opt A", "Opt B"},
+	}
+	body, _ := json.Marshal(createPayload)
+	resp, err := app.Client.Post(app.Server.URL+"/api/polls", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	var poll domain.Poll
+	json.NewDecoder(resp.Body).Decode(&poll)
+	resp.Body.Close()
+
+	// 2. Create User and Vote
+	token := app.createUserAndToken(t)
+	voteBody, _ := json.Marshal(map[string]interface{}{"option_id": poll.Options[0].ID})
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), bytes.NewReader(voteBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: token})
+	resp, err = app.Client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	// 3. Delete Vote (Success)
+	req, err = http.NewRequest("DELETE", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), nil)
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: token})
+	resp, err = app.Client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode) // Handler returns 201 on success
+
+	// Verify DB state (deleted_at set)
+	var deletedAt sql.NullTime
+	var status string
+	err = app.DB.QueryRow("SELECT deleted_at, status FROM votes WHERE poll_id = $1", poll.ID).Scan(&deletedAt, &status)
+	require.NoError(t, err)
+	assert.True(t, deletedAt.Valid, "deleted_at should be valid")
+	assert.Equal(t, "pending", status)
+
+	// 4. Delete Vote Again (Not Found / Idempotent?)
+	req, err = http.NewRequest("DELETE", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), nil)
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: token})
+	resp, err = app.Client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	// 5. Delete Without Auth
+	req, err = http.NewRequest("DELETE", fmt.Sprintf("%s/api/polls/%s/votes", app.Server.URL, poll.ID), nil)
+	require.NoError(t, err)
+	resp, err = app.Client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }

@@ -22,13 +22,11 @@ func NewVoteService(pollRepo ports.PollRepository, voteRepo ports.VoteRepository
 }
 
 func (s *voteService) Vote(ctx context.Context, input ports.VoteInput) error {
-	// 1. Validate Poll exists and fetch options
 	poll, err := s.pollRepo.GetByID(ctx, input.PollID)
 	if err != nil {
 		return err
 	}
 
-	// 2. Validate Option belongs to Poll
 	validOption := false
 	for _, opt := range poll.Options {
 		if opt.ID == input.OptionID {
@@ -40,7 +38,6 @@ func (s *voteService) Vote(ctx context.Context, input ports.VoteInput) error {
 		return domain.ErrInvalidOption
 	}
 
-	// 3. Check if already voted
 	hasVoted, err := s.voteRepo.HasVoted(ctx, input.PollID, input.UserID)
 	if err != nil {
 		return err
@@ -49,7 +46,6 @@ func (s *voteService) Vote(ctx context.Context, input ports.VoteInput) error {
 		return domain.ErrAlreadyVoted
 	}
 
-	// 4. Create Vote
 	vote := &domain.Vote{
 		ID:        uuid.New(),
 		PollID:    input.PollID,
@@ -59,6 +55,18 @@ func (s *voteService) Vote(ctx context.Context, input ports.VoteInput) error {
 		CreatedAt: time.Now(),
 	}
 
-	// 5. Save Vote
 	return s.voteRepo.SaveVote(ctx, vote)
+}
+
+func (s *voteService) Unvote(ctx context.Context, pollID, userID uuid.UUID) error {
+	hasVoted, err := s.voteRepo.HasVoted(ctx, pollID, userID)
+	if err != nil {
+		return err
+	}
+
+	if !hasVoted {
+		return domain.ErrDidNotVoted
+	}
+
+	return s.voteRepo.DeleteVote(ctx, pollID, userID)
 }
