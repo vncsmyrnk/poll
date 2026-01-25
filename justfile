@@ -35,3 +35,6 @@ build-and-run-summarizer-image:
 
 test:
   go test -v ./test/integration/...
+
+build-doc:
+  swag init -g internal/adapters/handler/http/router.go

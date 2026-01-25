@@ -26,6 +26,19 @@ type voteRequest struct {
 	OptionID uuid.UUID `json:"option_id"`
 }
 
+// VoteOnPoll godoc
+// @Summary      Casts a vote on a poll
+// @Tags         polls
+// @Accept       json
+// @Param        Authorization  header  string       true  "authorization header"
+// @Param        request        body    voteRequest  true  "request body"
+// @Param        id             path    int          true  "poll id"
+// @Success      201
+// @Failure      400
+// @Failure      404
+// @Failure      409
+// @Failure      500
+// @Router       /polls/{id}/votes [post]
 func (h *VoteHandler) VoteOnPoll(w http.ResponseWriter, r *http.Request) {
 	pollIDStr := chi.URLParam(r, "id")
 	pollID, err := uuid.Parse(pollIDStr)
@@ -78,6 +91,17 @@ func (h *VoteHandler) VoteOnPoll(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
+// GetMyVote godoc
+// @Summary      Gets the user vote on a poll
+// @Tags         polls
+// @Produce      json
+// @Param        Authorization  header  string       true  "authorization header"
+// @Param        id             path    int          true  "poll id"
+// @Success      200  {object}  domain.Vote
+// @Failure      400
+// @Failure      404
+// @Failure      500
+// @Router       /polls/{id}/my-vote [get]
 func (h *VoteHandler) GetMyVote(w http.ResponseWriter, r *http.Request) {
 	pollIDStr := chi.URLParam(r, "id")
 	pollID, err := uuid.Parse(pollIDStr)

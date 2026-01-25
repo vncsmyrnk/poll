@@ -1,0 +1,270 @@
+basePath: /api
+definitions:
+  domain.Poll:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      options:
+        items:
+          $ref: '#/definitions/domain.PollOption'
+        type: array
+      title:
+        type: string
+    type: object
+  domain.PollOption:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      poll_id:
+        type: string
+      text:
+        type: string
+    type: object
+  domain.PollOptionStats:
+    properties:
+      percentage:
+        format: float64
+        type: number
+      voteCount:
+        format: int64
+        type: integer
+    type: object
+  domain.Vote:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      option_id:
+        type: string
+      poll_id:
+        type: string
+      user_id:
+        type: string
+      voter_ip:
+        type: string
+    type: object
+  http.voteRequest:
+    properties:
+      option_id:
+        type: string
+    type: object
+  ports.CreatePollInput:
+    properties:
+      description:
+        type: string
+      options:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+externalDocs:
+  description: OpenAPI
+  url: https://swagger.io/resources/open-api/
+host: https://poll-api.vncsmyrnk.dev
+info:
+  contact: {}
+  description: Simple open source polling REST API.
+  title: Poll API
+  version: "1.0"
+paths:
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Clears the refresh token cookie
+      responses:
+        "200":
+          description: OK
+      summary: Logs the autheticated user out
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new access token cookie based on the refresh token. This
+        cookie is used as authentication for `/api` calls.
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+      summary: Refreshes the autheticated user out
+      tags:
+      - auth
+  /polls:
+    get:
+      parameters:
+      - description: current results page
+        in: query
+        name: page
+        type: integer
+      - description: name search by q
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.Poll'
+            type: array
+        "500":
+          description: Internal Server Error
+      summary: Lists all polls available
+      tags:
+      - polls
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: request body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/ports.CreatePollInput'
+      responses:
+        "201":
+          description: Created
+        "500":
+          description: Internal Server Error
+      summary: Creates a new poll
+      tags:
+      - polls
+  /polls/{id}:
+    get:
+      parameters:
+      - description: poll id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Poll'
+        "400":
+          description: Bad Request
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: Get a poll by id
+      tags:
+      - polls
+  /polls/{id}/count:
+    get:
+      parameters:
+      - description: authorization header
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: poll id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/domain.PollOptionStats'
+            type: object
+        "400":
+          description: Bad Request
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: Get the current vote count for a poll
+      tags:
+      - polls
+  /polls/{id}/my-vote:
+    get:
+      parameters:
+      - description: authorization header
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: poll id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Vote'
+        "400":
+          description: Bad Request
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: Gets the user vote on a poll
+      tags:
+      - polls
+  /polls/{id}/votes:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: authorization header
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: request body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.voteRequest'
+      - description: poll id
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Bad Request
+        "404":
+          description: Not Found
+        "409":
+          description: Conflict
+        "500":
+          description: Internal Server Error
+      summary: Casts a vote on a poll
+      tags:
+      - polls
+swagger: "2.0"

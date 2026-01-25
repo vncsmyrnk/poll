@@ -5,8 +5,19 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	httpSwagger "github.com/swaggo/http-swagger"
+	_ "github.com/vncsmyrnk/poll/docs"
 )
 
+// @title           Poll API
+// @version         1.0
+// @description     Simple open source polling REST API.
+
+// @host      https://poll-api.vncsmyrnk.dev
+// @BasePath  /api
+
+// @externalDocs.description  OpenAPI
+// @externalDocs.url          https://swagger.io/resources/open-api/
 func NewHandler(pollHandler *PollHandler, voteHandler *VoteHandler, authHandler *AuthHandler, userHandler *UserHandler, allowedOrigins []string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -37,6 +48,8 @@ func NewHandler(pollHandler *PollHandler, voteHandler *VoteHandler, authHandler 
 		r.Post("/logout", authHandler.Logout)
 		r.Post("/refresh", authHandler.Refresh)
 	})
+
+	r.Get("/swagger/*", httpSwagger.Handler())
 
 	return r
 }

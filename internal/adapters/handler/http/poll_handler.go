@@ -28,6 +28,14 @@ type createPollRequest struct {
 	Options     []string `json:"options"`
 }
 
+// CreatePoll godoc
+// @Summary      Creates a new poll
+// @Tags         polls
+// @Accept       json
+// @Param        request body ports.CreatePollInput true "request body"
+// @Success      201
+// @Failure      500
+// @Router       /polls [post]
 func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 	var req createPollRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -54,6 +62,16 @@ func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetPoll godoc
+// @Summary      Get a poll by id
+// @Tags         polls
+// @Produce      json
+// @Param        id   path      int  true  "poll id"
+// @Success      200  {object}  domain.Poll
+// @Failure      400
+// @Failure      404
+// @Failure      500
+// @Router       /polls/{id} [get]
 func (h *PollHandler) GetPoll(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
@@ -82,6 +100,15 @@ func (h *PollHandler) GetPoll(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ListPolls godoc
+// @Summary      Lists all polls available
+// @Tags         polls
+// @Produce      json
+// @Param        page   query      int  fale  "current results page"
+// @Param        q      query   string  false "name search by q"
+// @Success      200  {object}  []domain.Poll
+// @Failure      500
+// @Router       /polls [get]
 func (h *PollHandler) ListPolls(w http.ResponseWriter, r *http.Request) {
 	pageStr := r.URL.Query().Get("page")
 	page := 1
@@ -111,6 +138,18 @@ func (h *PollHandler) ListPolls(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetPollStats godoc
+// @Summary      Get the current vote count for a poll
+// @Tags         polls
+// @Produce      json
+// @Param        Authorization    header    string    true   	"authorization header"
+// @Param        id   path      int  true  "poll id"
+// @Success      200  {object}  map[uuid.UUID]domain.PollOptionStats
+// @Failure      400
+// @Failure      403
+// @Failure      404
+// @Failure      500
+// @Router       /polls/{id}/count [get]
 func (h *PollHandler) GetPollStats(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {

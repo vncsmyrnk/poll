@@ -50,6 +50,14 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, h.redirectURL, http.StatusSeeOther)
 }
 
+// Refresh godoc
+// @Summary      Refreshes the autheticated user out
+// @Description  Creates a new access token cookie based on the refresh token. This cookie is used as authentication for `/api` calls.
+// @Tags         auth
+// @Accept       json
+// @Success      200
+// @Failure      401
+// @Router       /auth/refresh [post]
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
@@ -76,6 +84,13 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"status":"ok"}`))
 }
 
+// Logout godoc
+// @Summary      Logs the autheticated user out
+// @Description  Clears the refresh token cookie
+// @Tags         auth
+// @Accept       json
+// @Success      200
+// @Router       /auth/logout [post]
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
 	if err == nil && cookie.Value != "" {
