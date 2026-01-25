@@ -10,8 +10,8 @@ import (
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
-	"github.com/poll/api/internal/adapters/repository/postgres"
-	"github.com/poll/api/internal/core/services"
+	"github.com/vncsmyrnk/poll/internal/adapters/repository/postgres"
+	"github.com/vncsmyrnk/poll/internal/core/services"
 )
 
 func main() {

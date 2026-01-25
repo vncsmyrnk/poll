@@ -3,7 +3,7 @@ package ports
 import (
 	"context"
 
-	"github.com/poll/api/internal/core/domain"
+	"github.com/vncsmyrnk/poll/internal/core/domain"
 )
 
 type TokenVerifier interface {

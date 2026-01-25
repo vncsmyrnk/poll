@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/poll/api/internal/core/ports"
+	"github.com/vncsmyrnk/poll/internal/core/ports"
 )
 
 type UserHandler struct {

@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/poll/api/internal/core/ports"
+	"github.com/vncsmyrnk/poll/internal/core/ports"
 )
 
 type summaryService struct {

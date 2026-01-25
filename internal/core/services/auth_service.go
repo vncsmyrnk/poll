@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/poll/api/internal/core/domain"
-	"github.com/poll/api/internal/core/ports"
+	"github.com/vncsmyrnk/poll/internal/core/domain"
+	"github.com/vncsmyrnk/poll/internal/core/ports"
 )
 
 type AuthService struct {

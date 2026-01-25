@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/poll/api/internal/core/domain"
-	"github.com/poll/api/internal/core/ports"
+	"github.com/vncsmyrnk/poll/internal/core/domain"
+	"github.com/vncsmyrnk/poll/internal/core/ports"
 )
 
 type voteRepository struct {

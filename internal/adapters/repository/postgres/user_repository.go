@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/poll/api/internal/core/domain"
-	"github.com/poll/api/internal/core/ports"
+	"github.com/vncsmyrnk/poll/internal/core/domain"
+	"github.com/vncsmyrnk/poll/internal/core/ports"
 )
 
 type UserRepository struct {

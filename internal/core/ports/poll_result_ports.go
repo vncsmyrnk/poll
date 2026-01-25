@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/poll/api/internal/core/domain"
+	"github.com/vncsmyrnk/poll/internal/core/domain"
 )
 
 type PollResultRepository interface {

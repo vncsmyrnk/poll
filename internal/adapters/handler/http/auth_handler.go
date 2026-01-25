@@ -3,7 +3,7 @@ package http
 import (
 	"net/http"
 
-	"github.com/poll/api/internal/core/ports"
+	"github.com/vncsmyrnk/poll/internal/core/ports"
 )
 
 type AuthHandler struct {

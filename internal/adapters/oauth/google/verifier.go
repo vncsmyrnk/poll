@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/poll/api/internal/core/ports"
+	"github.com/vncsmyrnk/poll/internal/core/ports"
 	"google.golang.org/api/idtoken"
 )
 

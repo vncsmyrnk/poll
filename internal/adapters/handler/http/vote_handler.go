@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/poll/api/internal/core/domain"
-	"github.com/poll/api/internal/core/ports"
+	"github.com/vncsmyrnk/poll/internal/core/domain"
+	"github.com/vncsmyrnk/poll/internal/core/ports"
 )
 
 type VoteHandler struct {

@@ -1,4 +1,4 @@
-module github.com/poll/api
+module github.com/vncsmyrnk/poll
 
 go 1.25
 

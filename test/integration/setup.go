@@ -14,15 +14,15 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	handler "github.com/poll/api/internal/adapters/handler/http"
-	repo "github.com/poll/api/internal/adapters/repository/postgres"
-	"github.com/poll/api/internal/core/ports"
-	"github.com/poll/api/internal/core/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+	handler "github.com/vncsmyrnk/poll/internal/adapters/handler/http"
+	repo "github.com/vncsmyrnk/poll/internal/adapters/repository/postgres"
+	"github.com/vncsmyrnk/poll/internal/core/ports"
+	"github.com/vncsmyrnk/poll/internal/core/services"
 )
 
 // MockVerifier for testing
